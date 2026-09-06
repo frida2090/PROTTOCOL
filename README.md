@@ -1,6 +1,6 @@
-# PROTTOCOL CATT
+# PROTTOCOL
 
-Sistema web en PHP nativo para gestionar usuarios y un calendario de actividades académicas.
+Sistema web que centraliza todo lo que necesitas saber de la CATT en un solo lugar: procesos académicos, calendario de actividades, fechas de pláticas, formularios y la información de directores y sinodales. Está pensado para que la comunidad de ESCOM encuentre rápidamente los recursos y avisos que necesita durante su trayectoria académica.
 
 ## Requisitos
 
@@ -24,7 +24,7 @@ php -S localhost:8000 -t public
 
 4. Abra `http://localhost:8000`.
 
-El registro permite crear estudiantes, profesores y miembros CATT. El calendario requiere una sesión iniciada.
+El registro permite crear estudiantes, profesores y miembros CATT. El calendario de actividades es público; los profesores y miembros CATT pueden iniciar sesión para publicar nuevas actividades.
 
 ## Estructura
 
