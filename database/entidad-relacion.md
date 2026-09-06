@@ -15,6 +15,7 @@ erDiagram
     CALENDARIO {
         int id PK
         date fecha
+        date fecha_fin
         varchar actividad
         text descripcion
         int profesor_id FK

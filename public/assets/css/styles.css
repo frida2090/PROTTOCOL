@@ -64,6 +64,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--wine); outline: 
 .activity-item h2 { font-size: 1.45rem; }
 .activity-item p { color: var(--muted); font-size: .9rem; margin: 7px 0; }
 .activity-item small { color: var(--wine); font-weight: 700; }
+.activity-item .date-range { display: block; margin-bottom: 4px; }
 .empty-state { padding: 60px 20px; text-align: center; }
 .empty-state span { color: var(--gold); font-size: 2.5rem; }.empty-state h2 { font-size: 1.8rem; }.empty-state p { color: var(--muted); }
 .new-activity { background: var(--wine-dark); color: var(--white); display: grid; gap: 50px; grid-template-columns: 1fr 1fr; margin-top: 65px; padding: 38px; }
