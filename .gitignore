@@ -1,0 +1,12 @@
+# Credenciales y configuración local
+.env
+config/.env
+
+# Sistema operativo y editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Logs y temporales
+*.log
+*.tmp
