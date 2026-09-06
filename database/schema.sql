@@ -3,6 +3,7 @@ CREATE DATABASE IF NOT EXISTS catt_prottocol
   COLLATE utf8mb4_unicode_ci;
 
 USE catt_prottocol;
+SET NAMES utf8mb4;
 
 CREATE TABLE usuario (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -17,7 +18,7 @@ CREATE TABLE usuario (
 CREATE TABLE calendario (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     fecha DATE NOT NULL,
-  fecha_fin DATE NULL,
+    fecha_fin DATE NULL,
     actividad VARCHAR(180) NOT NULL,
     descripcion TEXT NULL,
     profesor_id INT UNSIGNED NOT NULL,
@@ -25,9 +26,9 @@ CREATE TABLE calendario (
     CONSTRAINT fk_calendario_profesor
         FOREIGN KEY (profesor_id) REFERENCES usuario(id)
         ON UPDATE CASCADE
-      ON DELETE RESTRICT,
+        ON DELETE RESTRICT,
     CONSTRAINT chk_calendario_rango
-      CHECK (fecha_fin IS NULL OR fecha_fin >= fecha)
+        CHECK (fecha_fin IS NULL OR fecha_fin >= fecha)
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_calendario_fecha ON calendario(fecha);
@@ -41,13 +42,13 @@ VALUES ('Profesor CATT', 'profesor@catt.local', 'PROF-001', 'profesor',
 INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, profesor_id)
 SELECT datos.fecha, datos.fecha_fin, datos.actividad, datos.descripcion, u.id
 FROM (
-  SELECT '2026-07-15' fecha, '2026-09-04' fecha_fin, 'Modificaciones al protocolo' actividad, '15 de julio al 4 de septiembre de 2026' descripcion
-  UNION ALL SELECT '2026-08-25', NULL, 'Plática informativa (TT-I, TT-II y TTR 2027/1)', NULL
-  UNION ALL SELECT '2026-09-14', NULL, 'Publicación de grupos', NULL
-  UNION ALL SELECT '2026-10-22', NULL, 'Publicación calendario de presentaciones', 'Reprogramación por formato'
-  UNION ALL SELECT '2026-10-29', '2026-11-13', 'Presentación ordinaria del trabajo terminal (TT-I)', '29 de octubre al 13 de noviembre de 2026'
-  UNION ALL SELECT '2026-11-17', '2026-12-01', 'Presentación ordinaria del trabajo terminal (TT-II)', '17 de noviembre al 1 de diciembre de 2026'
-  UNION ALL SELECT '2026-12-04', '2026-12-08', 'Presentación extraordinaria del trabajo terminal I y II', '4, 7 y 8 de diciembre de 2026'
+    SELECT '2026-07-15' fecha, '2026-09-04' fecha_fin, 'Modificaciones al protocolo' actividad, '15 de julio al 4 de septiembre de 2026' descripcion
+    UNION ALL SELECT '2026-08-25', NULL, 'Plática informativa (TT-I, TT-II y TTR 2027/1)', NULL
+    UNION ALL SELECT '2026-09-14', NULL, 'Publicación de grupos', NULL
+    UNION ALL SELECT '2026-10-22', NULL, 'Publicación calendario de presentaciones', 'Reprogramación por formato'
+    UNION ALL SELECT '2026-10-29', '2026-11-13', 'Presentación ordinaria del trabajo terminal (TT-I)', '29 de octubre al 13 de noviembre de 2026'
+    UNION ALL SELECT '2026-11-17', '2026-12-01', 'Presentación ordinaria del trabajo terminal (TT-II)', '17 de noviembre al 1 de diciembre de 2026'
+    UNION ALL SELECT '2026-12-04', '2026-12-08', 'Presentación extraordinaria del trabajo terminal I y II', '4, 7 y 8 de diciembre de 2026'
   UNION ALL SELECT '2026-12-11', NULL, 'Entrega de calificaciones finales ordinarias CATT', NULL
   UNION ALL SELECT '2026-12-11', '2026-12-15', 'Captura de calificaciones finales ordinarias docentes titulares', '11, 14 y 15 de diciembre de 2026'
   UNION ALL SELECT '2026-10-28', NULL, 'Entrega de calificaciones ordinarias de seguimiento TT-I', NULL
