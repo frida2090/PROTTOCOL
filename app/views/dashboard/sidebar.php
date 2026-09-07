@@ -6,11 +6,11 @@ function roleMenuItems(string $role): array
     $menuItems = [
         'estudiante' => [
             'inicio' => ['label' => 'Inicio', 'url' => 'panelAlumno.php'],
-            'perfil' => ['label' => 'Datos personales', 'url' => 'panelAlumno.php'], //url= perfilAlumno.php?view=perfil
-            'tramites' => ['label' => 'Tramites', 'url' => 'panelAlumno.php'], //'perfilAlumno.php?view=tramites' 
-            'formatos' => ['label' => 'Formatos', 'url' => 'panelAlumno.php'], //url= perfilAlumno.php?view=formatos 
+            'perfil' => ['label' => 'Datos personales', 'url' => 'panelAlumno.php?modal=perfil'],
+            'tramites' => ['label' => 'Trámites', 'url' => 'panelAlumno.php?modal=tramites'],
+            'formatos' => ['label' => 'Formatos', 'url' => 'panelAlumno.php?modal=formatos'],
             'calendario' => ['label' => 'Calendario', 'url' => 'calendario.php'],
-            'avisos' => ['label' => 'Avisos', 'url' => 'panelAlumno.php'], //url= perfilAlumno.php?view=avisos        
+            'avisos' => ['label' => 'Avisos', 'url' => 'panelAlumno.php'],
         ],
         'profesor' => [
             'inicio' => ['label' => 'Inicio', 'url' => 'panelProfesores.php'],
@@ -24,7 +24,7 @@ function roleMenuItems(string $role): array
         ],
     ];
 
-    return $menuItems[$role] ?? $menuItems['alumno'];
+    return $menuItems[$role] ?? $menuItems['estudiante'];
 }
 
 
