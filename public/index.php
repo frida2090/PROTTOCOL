@@ -1,10 +1,6 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
-
-if (currentUser()) {
-    redirect('calendario.php');
-}
 $pageTitle = 'Inicio';
 require __DIR__ . '/../app/views/header.php';
 ?>

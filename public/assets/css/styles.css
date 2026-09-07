@@ -13,7 +13,7 @@ a:hover { text-decoration: underline; }
 .main-nav { align-items: center; display: flex; gap: 24px; font-size: .88rem; }
 .main-nav a { color: var(--ink); }
 .nav-register, .nav-logout { border-bottom: 2px solid var(--gold); padding-bottom: 3px; }
-.user-chip { color: var(--muted); font-size: .84rem; }
+.user-chip { color: var(--muted) !important; font-size: .84rem; }.user-chip:hover { color: var(--wine) !important; text-decoration: underline; }
 .page-shell { margin: 0 auto; max-width: 1220px; min-height: calc(100vh - 150px); padding: 60px clamp(20px, 5vw, 76px); }
 .auth-layout { align-items: center; display: grid; gap: clamp(40px, 9vw, 130px); grid-template-columns: 1fr minmax(320px, 430px); min-height: 66vh; }
 .auth-intro { max-width: 560px; }

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../auth.php';
 $user = currentUser();
 $flash = consumeFlash();
 $pageTitle = $pageTitle ?? 'CATT';
+$userPanelUrl = $user && $user['rol'] === 'estudiante' ? 'panelAlumno.php' : 'calendario.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -21,7 +22,7 @@ $pageTitle = $pageTitle ?? 'CATT';
     <nav class="main-nav" aria-label="Navegación principal">
         <?php if ($user): ?>
             <a href="calendario.php">Calendario</a>
-            <span class="user-chip"><?= e($user['nombre']) ?></span>
+            <a class="user-chip" href="<?= e($userPanelUrl) ?>" title="Abrir mi panel"><?= e($user['nombre']) ?></a>
             <a class="nav-logout" href="logout.php">Salir</a>
         <?php else: ?>
             <a href="index.php#inicio">Inicio</a>
