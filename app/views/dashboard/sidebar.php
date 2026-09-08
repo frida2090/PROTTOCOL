@@ -13,9 +13,9 @@ function roleMenuItems(string $role): array
             'avisos' => ['label' => 'Avisos', 'url' => 'panelAlumno.php'],
         ],
         'profesor' => [
-            'inicio' => ['label' => 'Inicio', 'url' => 'panelProfesores.php'],
-            'perfil' => ['label' => 'Datos personales', 'url' => 'panelProfesores.php'],     
-            'calendario' => ['label' => 'Calendario', 'url' => 'calendario.php'],
+            'inicio' => ['label' => 'Inicio', 'url' => 'panelProfesores.php'],   
+            'revisiones' => ['label' => 'Revisiones asignadas', 'url' => 'panelProfesor.php?modal=revisiones'],
+            'formatos'   => ['label' => 'Registrar dictamen', 'url' => 'panelProfesor.php?modal=formatos'],
         ],
         'miembroCatt' => [
             'inicio' => ['label' => 'Inicio', 'url' => 'panelProfesores.php'],
