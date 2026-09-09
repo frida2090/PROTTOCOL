@@ -8,11 +8,12 @@ if(!$user){
     redirect('login.php');
 }
 
-if($user['rol'] !== 'profesor') {
-    flash('error', 'Acceso denegado. Solo los profesores pueden acceder a este panel.');
+if($user['rol'] !== 'miembroCatt') {
+    flash('error', 'Acceso denegado. Solo los miembros de la CATT pueden acceder a este panel.');
     redirect('login.php');
 }
 
+// Registro de dictámenes emitidos por el miembro CATT
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'dictamen') {
     $tipoDictamen   = trim($_POST['tipo_dictamen'] ?? '');
     $noBoletaAlumno = trim($_POST['no_boleta_alumno'] ?? '');
@@ -27,20 +28,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'd
         && $noBoletaAlumno !== ''
         && in_array($resultado, $resultadosPermitidos, true)
     ) {
-        // Aquí se integraría el guardado del dictamen en la base de datos
-        // (tabla de revisiones/dictámenes de la CATT), asociando al alumno,
-        // al profesor revisor ($user['id']), el tipo de documento y el resultado.
         flash('success', 'El dictamen fue registrado correctamente y quedará disponible para el alumno.');
     } else {
         flash('error', 'Completa el número de boleta del alumno y selecciona un tipo de trámite y un resultado válidos.');
     }
-    redirect('panelProfesor.php?modal=formatos');
+    redirect('panelMiembroCatt.php?modal=formatos');
 }
 
-$pageTitle = 'Panel del Profesor · CATT';
+$pageTitle = 'Panel del Miembro · CATT';
 require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
-$modalPermitido = in_array($modal, ['perfil', 'revisiones', 'dictamen'], true);
+$modalPermitido = in_array($modal, ['perfil', 'revisiones', 'formatos'], true);
 
 $query = database()->prepare("SELECT fecha, fecha_fin, actividad, descripcion FROM calendario WHERE COALESCE(fecha_fin, fecha) >= CURRENT_DATE ORDER BY fecha ASC LIMIT 3");
 $query->execute();
@@ -53,7 +51,7 @@ $proximasFechas = $query->fetchAll();
         <header class="dashboard-topbar">
             <div>
                 <p class="eyebrow">Comisión Académica de Trabajos Terminales</p>
-                <h1>Panel del Profesor</h1>
+                <h1>Panel del Miembro CATT</h1>
             </div>
             <a class="button button-primary" href="calendario.php">Ver calendario</a>
         </header>
@@ -64,32 +62,32 @@ $proximasFechas = $query->fetchAll();
                 <h2>Protocolos de TT</h2>
                 <p class="card-copy">Revisa los protocolos registrados por los alumnos y emite el dictamen correspondiente de la CATT.</p>
                 <div class="stat-row">
-                    <strong>8</strong>
+                    <strong>0</strong>
                     <span>pendientes por revisar</span>
                 </div>
-                <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=protocolo">Ver lista</a>
+                <a class="card-list-link" href="panelMiembroCatt.php?modal=revisiones&amp;tipo=protocolo">Ver lista</a>
             </article>
 
             <article class="dashboard-card">
-                <p class="dashboard-kicker">Evaluación</p>
-                <h2>Trabajo Terminal I</h2>
-                <p class="card-copy">Consulta y evalúa los avances de Trabajo Terminal I de tus alumnos asignados.</p>
+                <p class="dashboard-kicker">Procesa</p>
+                <h2>Protocolo, TT I y II</h2>
+                <p class="card-copy">Procesa las solicitudes de modificación, reprogramación, extraordinario y bajas de alumnos.</p>
                 <div class="stat-row">
-                    <strong>5</strong>
-                    <span>alumnos por evaluar</span>
+                    <strong>0</strong>
+                    <span>pendientes por procesar</span>
                 </div>
-                 <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=trabajo-terminal-i">Ver lista</a>
+                 <a class="card-list-link" href="panelMiembroCatt.php?modal=revisiones&amp;tipo=trabajo-terminal-i">Ver lista</a>
             </article>
 
             <article class="dashboard-card">
-                <p class="dashboard-kicker">Evaluación</p>
-                <h2>Trabajo Terminal II</h2>
-                <p class="card-copy">Revisa el documento final y registra el dictamen de Trabajo Terminal II ante la comisión.</p>
+                <p class="dashboard-kicker">Emite</p>
+                <h2>TT I y II</h2>
+                <p class="card-copy">Genera el listado de alumnos que son candidatos para inscribir TTI y TTII</p>
                 <div class="stat-row">
-                    <strong>3</strong>
-                    <span>alumnos por evaluar</span>
+                    <strong>0</strong>
+                    <span>alumnos candidatos</span>
                 </div>
-                <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=trabajo-terminal-ii">Ver lista</a>
+                <a class="card-list-link" href="panelMiembroCatt.php?modal=revisiones&amp;tipo=trabajo-terminal-ii">Ver lista</a>
             </article>
         </section>
 
@@ -122,11 +120,11 @@ $proximasFechas = $query->fetchAll();
     <?php if ($modal === 'perfil'): ?>
         <section class="dashboard-modal-content" aria-labelledby="modal-perfil-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
-            <p class="eyebrow">Mi cuenta</p><h2 id="modal-perfil-title">Datos personales</h2><p class="modal-intro">Información asociada a tu cuenta de profesor.</p>
+            <p class="eyebrow">Mi cuenta</p><h2 id="modal-perfil-title">Datos personales</h2><p class="modal-intro">Información asociada a tu cuenta de miembro de la CATT.</p>
             <dl class="profile-details">
                 <div><dt>Nombre completo</dt><dd><?= e($user['nombre']) ?></dd></div>
                 <div><dt>Correo electrónico</dt><dd><?= e($user['correo']) ?></dd></div>
-                <div><dt>Rol</dt><dd>Profesor · Comisión Académica de Trabajos Terminales</dd></div>
+                <div><dt>Rol</dt><dd>Miembro CATT · Comisión Académica de Trabajos Terminales</dd></div>
             </dl>
         </section>
     <?php elseif ($modal === 'revisiones'): ?>
@@ -136,11 +134,11 @@ $proximasFechas = $query->fetchAll();
             <div class="empty-modal">
                 <span>—</span>
                 <h3>No tienes revisiones pendientes</h3>
-                <p>Cuando la CATT te asigne protocolos o trabajos terminales para evaluar, aquí podrás consultar su estatus.</p>
-                <a class="button button-primary" href="panelProfesor.php?modal=dictamen">Registrar un dictamen</a>
+                <p>Ningun alumno ha enviado formatos para revisar.</p>
+                <a class="button button-primary" href="panelMiembroCatt.php?modal=formatos">Registrar un dictamen</a>
             </div>
         </section>
-    <?php elseif ($modal === 'dictamen'): ?>
+    <?php elseif ($modal === 'formatos'): ?>
         <section class="dashboard-modal-content" aria-labelledby="modal-formatos-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
             <p class="eyebrow">Nuevo dictamen</p><h2 id="modal-formatos-title">Registrar dictamen de la CATT</h2><p class="modal-intro">Captura el resultado de la revisión de un alumno.</p>
@@ -176,10 +174,10 @@ $proximasFechas = $query->fetchAll();
 </div>
 <script>
 document.querySelectorAll('[data-close-modal]').forEach((element) => {
-    element.addEventListener('click', () => { window.location.href = 'panelProfesor.php'; });
+    element.addEventListener('click', () => { window.location.href = 'panelMiembroCatt.php'; });
 });
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && document.querySelector('.dashboard-modal.is-open')) { window.location.href = 'panelProfesor.php'; }
+    if (event.key === 'Escape' && document.querySelector('.dashboard-modal.is-open')) { window.location.href = 'panelMiembroCatt.php'; }
 });
 </script>
 <?php require __DIR__ . '/../app/views/footer.php'; ?>

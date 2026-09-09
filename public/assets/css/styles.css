@@ -116,8 +116,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--wine); outline: 
 .panel-header h2 { font-size: 1.3rem; }
 .panel-header a { color: var(--wine); }
 .activity-summary { display: grid; gap: 14px; }
-.summary-item { align-items: center; border: 1px solid var(--line); display: flex; gap: 18px; padding: 16px 18px; }
-.summary-date { align-items: center; background: var(--gold); border-radius: 10px; color: var(--ink); display: inline-flex; font-family: 'Playfair Display', Georgia, serif; font-size: 1.2rem; height: 46px; justify-content: center; min-width: 46px; }
+.summary-item { align-items: center; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 18px; padding: 16px 18px; }
+.summary-date { align-items: center; background: var(--gold); border-radius: 10px; color: var(--ink); display: inline-flex; font-family: 'Playfair Display', Georgia, serif; font-size: 1.2rem; height: 46px; justify-content: center; min-width: 46px; padding: 0 1rem; }
 .summary-item strong { display: block; }
 .summary-item small { color: var(--muted); }
 /*boton ver listas panelProfesor*/

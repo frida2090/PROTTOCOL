@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $correo = trim($_POST['correo'] ?? '');
     $password = $_POST['password'] ?? '';
     if (attemptLogin($correo, $password)) {
-        redirect(currentUser()['rol'] === 'estudiante'? 'panelAlumno.php': (currentUser()['rol'] === 'profesor' ? 'panelProfesor.php' : 'calendario.php'));
+        redirect(currentUser()['rol'] === 'estudiante' ? 'panelAlumno.php': (currentUser()['rol'] === 'profesor' ? 'panelProfesor.php' : (currentUser()['rol'] === 'miembroCatt' ? 'panelMiembroCatt.php' : 'calendario.php')));
     }
     $error = 'El correo o la contraseña no son correctos.';
 }

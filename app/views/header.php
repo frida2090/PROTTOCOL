@@ -3,7 +3,13 @@ require_once __DIR__ . '/../auth.php';
 $user = currentUser();
 $flash = consumeFlash();
 $pageTitle = $pageTitle ?? 'CATT';
-$userPanelUrl = $user && $user['rol'] === 'estudiante' ? 'panelAlumno.php' : 'calendario.php';
+$userPanelUrl = $user ? match ($user['rol']) {
+        'estudiante'   => 'panelAlumno.php',
+        'profesor'     => 'panelProfesor.php',
+        'miembroCatt'  => 'panelMiembroCatt.php',
+        default        => 'calendario.php',
+    }
+    : 'calendario.php';
 ?>
 <!DOCTYPE html>
 <html lang="es">

@@ -28,6 +28,10 @@ $pageTitle = 'Panel del Alumno';
 require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
 $modalPermitido = in_array($modal, ['perfil', 'tramites', 'formatos'], true);
+
+$query = database()->prepare("SELECT fecha, fecha_fin, actividad, descripcion FROM calendario WHERE COALESCE(fecha_fin, fecha) >= CURRENT_DATE ORDER BY fecha ASC LIMIT 3");
+$query->execute();
+$proximasFechas = $query->fetchAll();
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -72,27 +76,19 @@ $modalPermitido = in_array($modal, ['perfil', 'tramites', 'formatos'], true);
             </div>
 
             <div class="activity-summary">
-                <div class="summary-item">
-                    <span class="summary-date">18</span>
-                    <div>
-                        <strong>Registro de protocolos</strong>
-                        <small>Del 21 al 25 de septiembre</small>
-                    </div>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-date">03</span>
-                    <div>
-                        <strong>Primera evaluación</strong>
-                        <small>19 al 23 de octubre</small>
-                    </div>
-                </div>
-                <div class="summary-item">
-                    <span class="summary-date">14</span>
-                    <div>
-                        <strong>Publicación de grupos</strong>
-                        <small>14 de septiembre</small>
-                    </div>
-                </div>
+                <?php if(empty($proximasFechas)):?>
+                    <p>No hay fechas próximas registradas en el calendario.</p>
+                <?php else: ?>
+                    <?php foreach($proximasFechas as $fecha): ?>
+                        <div class="summary-item">
+                            <span class="summary-date"><?= e(date('d/m/Y', strtotime($fecha['fecha']))) ?></span>
+                            <div>
+                                <strong><?= e($fecha['actividad']) ?></strong>
+                                <small><?= e($fecha['descripcion']) ?></small>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </section>
     </main>
