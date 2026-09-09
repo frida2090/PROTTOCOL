@@ -22,7 +22,7 @@ $userPanelUrl = $user ? match ($user['rol']) {
 <body>
 <header class="site-header">
     <a class="brand" href="index.php">
-        <img src="assets/prottocol.png" alt="Logo PROTTOCOL">
+        <img src="assets/img/prottocol.webp" alt="Logo PROTTOCOL">
         <span>CATT <small>Actividades académicas</small></span>
     </a>
     <nav class="main-nav" aria-label="Navegación principal">
