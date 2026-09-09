@@ -64,7 +64,7 @@ $proximasFechas = $query->fetchAll();
                 <h2>Protocolos de TT</h2>
                 <p class="card-copy">Revisa los protocolos registrados por los alumnos y emite el dictamen correspondiente de la CATT.</p>
                 <div class="stat-row">
-                    <strong>8</strong>
+                    <strong>0</strong>
                     <span>pendientes por revisar</span>
                 </div>
                 <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=protocolo">Ver lista</a>
@@ -75,7 +75,7 @@ $proximasFechas = $query->fetchAll();
                 <h2>Trabajo Terminal I</h2>
                 <p class="card-copy">Consulta y evalúa los avances de Trabajo Terminal I de tus alumnos asignados.</p>
                 <div class="stat-row">
-                    <strong>5</strong>
+                    <strong>0</strong>
                     <span>alumnos por evaluar</span>
                 </div>
                  <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=trabajo-terminal-i">Ver lista</a>
@@ -86,7 +86,7 @@ $proximasFechas = $query->fetchAll();
                 <h2>Trabajo Terminal II</h2>
                 <p class="card-copy">Revisa el documento final y registra el dictamen de Trabajo Terminal II ante la comisión.</p>
                 <div class="stat-row">
-                    <strong>3</strong>
+                    <strong>0</strong>
                     <span>alumnos por evaluar</span>
                 </div>
                 <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=trabajo-terminal-ii">Ver lista</a>
