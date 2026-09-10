@@ -2,10 +2,18 @@
 ALTER TABLE usuario
     ADD COLUMN apellido_paterno VARCHAR(60) NULL AFTER nombre,
     ADD COLUMN apellido_materno VARCHAR(60) NULL AFTER apellido_paterno,
-    ADD COLUMN numero_empleado VARCHAR(30) NULL UNIQUE AFTER noBoleta;
+    ADD COLUMN numero_empleado VARCHAR(30) NULL UNIQUE AFTER noBoleta,
+    MODIFY noBoleta VARCHAR(30) NULL;
 
--- Separe manualmente los nombres completos existentes antes de aplicar las restricciones NOT NULL.
--- Para el usuario de demostración se conserva el valor anterior como número de empleado.
+-- Conserva el primer término como nombre y el resto como apellido paterno.
+-- Revise y ajuste manualmente los apellidos compuestos después de migrar.
+UPDATE usuario
+SET apellido_paterno = TRIM(SUBSTRING(nombre, LENGTH(SUBSTRING_INDEX(nombre, ' ', 1)) + 1)),
+    nombre = SUBSTRING_INDEX(nombre, ' ', 1)
+WHERE apellido_paterno IS NULL;
+
+-- Para profesores y miembros CATT, el identificador anterior se convierte
+-- en número de empleado.
 UPDATE usuario
 SET numero_empleado = noBoleta,
     noBoleta = NULL
