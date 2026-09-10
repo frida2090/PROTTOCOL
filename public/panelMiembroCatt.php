@@ -122,8 +122,9 @@ $proximasFechas = $query->fetchAll();
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
             <p class="eyebrow">Mi cuenta</p><h2 id="modal-perfil-title">Datos personales</h2><p class="modal-intro">Información asociada a tu cuenta de miembro de la CATT.</p>
             <dl class="profile-details">
-                <div><dt>Nombre completo</dt><dd><?= e($user['nombre']) ?></dd></div>
+                <div><dt>Nombre completo</dt><dd><?= e(fullName($user)) ?></dd></div>
                 <div><dt>Correo electrónico</dt><dd><?= e($user['correo']) ?></dd></div>
+                <div><dt>Número de empleado</dt><dd><?= e($user['numero_empleado']) ?></dd></div>
                 <div><dt>Rol</dt><dd>Miembro CATT · Comisión Académica de Trabajos Terminales</dd></div>
             </dl>
         </section>

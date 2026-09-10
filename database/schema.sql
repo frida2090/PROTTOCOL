@@ -7,12 +7,19 @@ SET NAMES utf8mb4;
 
 CREATE TABLE usuario (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    nombre VARCHAR(120) NOT NULL,
+  nombre VARCHAR(60) NOT NULL,
+  apellido_paterno VARCHAR(60) NOT NULL,
+  apellido_materno VARCHAR(60) NULL,
     correo VARCHAR(160) NOT NULL UNIQUE,
-    noBoleta VARCHAR(30) NOT NULL UNIQUE,
+  noBoleta VARCHAR(30) NULL UNIQUE,
+  numero_empleado VARCHAR(30) NULL UNIQUE,
     rol ENUM('estudiante', 'profesor', 'miembroCatt') NOT NULL DEFAULT 'estudiante',
     password_hash VARCHAR(255) NOT NULL,
-    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT chk_usuario_identificador CHECK (
+    (rol = 'estudiante' AND noBoleta IS NOT NULL AND numero_empleado IS NULL)
+    OR (rol IN ('profesor', 'miembroCatt') AND numero_empleado IS NOT NULL AND noBoleta IS NULL)
+  )
 ) ENGINE=InnoDB;
 
 CREATE TABLE calendario (
@@ -35,8 +42,8 @@ CREATE INDEX idx_calendario_fecha ON calendario(fecha);
 CREATE INDEX idx_usuario_rol ON usuario(rol);
 
 -- Usuario profesor de demostración. Cambie la contraseña después de instalar.
-INSERT INTO usuario (nombre, correo, noBoleta, rol, password_hash)
-VALUES ('Profesor CATT', 'profesor@catt.local', 'PROF-001', 'profesor',
+INSERT INTO usuario (nombre, apellido_paterno, apellido_materno, correo, numero_empleado, rol, password_hash)
+VALUES ('Profesor', 'CATT', NULL, 'profesor@catt.local', 'PROF-001', 'profesor',
         '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llCq.D7k2lP8bKx9kqZy');
 
 INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, profesor_id)

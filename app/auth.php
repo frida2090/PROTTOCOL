@@ -23,7 +23,7 @@ function requireAuth(): void
 
 function attemptLogin(string $correo, string $password): bool
 {
-    $query = database()->prepare('SELECT id, nombre, correo, noBoleta, rol, password_hash FROM usuario WHERE correo = ? LIMIT 1');
+    $query = database()->prepare('SELECT id, nombre, apellido_paterno, apellido_materno, correo, noBoleta, numero_empleado, rol, password_hash FROM usuario WHERE correo = ? LIMIT 1');
     $query->execute([$correo]);
     $user = $query->fetch();
 

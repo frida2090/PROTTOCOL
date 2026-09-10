@@ -62,7 +62,7 @@ function renderSidebar(string $active = 'inicio'): void{
 
         <div class="sidebar-user-info">
                 <p>Sesion Activa:</p>
-                <strong><?= e($user['nombre']) ?? 'Usuario' ?></strong>
+                <strong><?= e(fullName($user)) ?: 'Usuario' ?></strong>
                 <strong><?= e($user['correo']) ?? 'Correo' ?></strong>
         </div>    
     </aside>

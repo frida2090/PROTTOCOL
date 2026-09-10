@@ -1,6 +1,15 @@
 <?php
 declare(strict_types=1);
 
+function fullName(array $user): string
+{
+    return implode(' ', array_filter([
+        $user['nombre'] ?? '',
+        $user['apellido_paterno'] ?? '',
+        $user['apellido_materno'] ?? '',
+    ]));
+}
+
 function e(?string $value): string
 {
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');

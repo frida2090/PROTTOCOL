@@ -28,7 +28,7 @@ $userPanelUrl = $user ? match ($user['rol']) {
     <nav class="main-nav" aria-label="Navegación principal">
         <?php if ($user): ?>
             <a href="calendario.php">Calendario</a>
-            <a class="user-chip" href="<?= e($userPanelUrl) ?>" title="Abrir mi panel"><?= e($user['nombre']) ?></a>
+            <a class="user-chip" href="<?= e($userPanelUrl) ?>" title="Abrir mi panel"><?= e(fullName($user)) ?></a>
             <a class="nav-logout" href="logout.php">Salir</a>
         <?php else: ?>
             <a href="index.php#inicio">Inicio</a>

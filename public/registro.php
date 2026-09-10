@@ -9,24 +9,40 @@ if (currentUser()) {
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre = trim($_POST['nombre'] ?? '');
+    $apellidoPaterno = trim($_POST['apellido_paterno'] ?? '');
+    $apellidoMaterno = trim($_POST['apellido_materno'] ?? '');
     $correo = trim($_POST['correo'] ?? '');
     $noBoleta = trim($_POST['noBoleta'] ?? '');
+    $numeroEmpleado = trim($_POST['numero_empleado'] ?? '');
     $rol = $_POST['rol'] ?? 'estudiante';
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
 
-    if ($nombre === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL) || $noBoleta === '') {
+    if ($nombre === '' || $apellidoPaterno === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         $error = 'Completa todos los datos con un formato válido.';
     } elseif (!in_array($rol, ['estudiante', 'profesor', 'miembroCatt'], true)) {
         $error = 'Selecciona un rol válido.';
+    } elseif (($rol === 'estudiante' && $noBoleta === '') || ($rol !== 'estudiante' && $numeroEmpleado === '')) {
+        $error = $rol === 'estudiante'
+            ? 'El número de boleta es obligatorio para estudiantes.'
+            : 'El número de empleado es obligatorio para profesores y miembros CATT.';
     } elseif (strlen($password) < 8) {
         $error = 'La contraseña debe tener al menos 8 caracteres.';
     } elseif ($password !== $confirmPassword) {
         $error = 'Las contraseñas no coinciden.';
     } else {
         try {
-            $query = database()->prepare('INSERT INTO usuario (nombre, correo, noBoleta, rol, password_hash) VALUES (?, ?, ?, ?, ?)');
-            $query->execute([$nombre, $correo, $noBoleta, $rol, password_hash($password, PASSWORD_DEFAULT)]);
+            $query = database()->prepare('INSERT INTO usuario (nombre, apellido_paterno, apellido_materno, correo, noBoleta, numero_empleado, rol, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $query->execute([
+                $nombre,
+                $apellidoPaterno,
+                $apellidoMaterno !== '' ? $apellidoMaterno : null,
+                $correo,
+                $rol === 'estudiante' ? $noBoleta : null,
+                $rol !== 'estudiante' ? $numeroEmpleado : null,
+                $rol,
+                password_hash($password, PASSWORD_DEFAULT),
+            ]);
             flash('success', 'Tu cuenta fue creada. Ya puedes iniciar sesión.');
             redirect('index.php');
         } catch (PDOException $exception) {
@@ -49,9 +65,12 @@ require __DIR__ . '/../app/views/header.php';
     <div class="form-panel wide-panel">
         <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
         <form method="post" class="form-grid" novalidate>
-            <div class="field field-full"><label for="nombre">Nombre completo</label><input id="nombre" name="nombre" required value="<?= e($_POST['nombre'] ?? '') ?>"></div>
+            <div class="field"><label for="nombre">Nombre(s)</label><input id="nombre" name="nombre" required value="<?= e($_POST['nombre'] ?? '') ?>"></div>
+            <div class="field"><label for="apellido_paterno">Apellido paterno</label><input id="apellido_paterno" name="apellido_paterno" required value="<?= e($_POST['apellido_paterno'] ?? '') ?>"></div>
+            <div class="field"><label for="apellido_materno">Apellido materno</label><input id="apellido_materno" name="apellido_materno" value="<?= e($_POST['apellido_materno'] ?? '') ?>"></div>
             <div class="field"><label for="correo">Correo electrónico</label><input id="correo" name="correo" type="email" required value="<?= e($_POST['correo'] ?? '') ?>"></div>
-            <div class="field"><label for="noBoleta">Número de boleta</label><input id="noBoleta" name="noBoleta" required value="<?= e($_POST['noBoleta'] ?? '') ?>"></div>
+            <div class="field"><label for="noBoleta">Número de boleta</label><input id="noBoleta" name="noBoleta" value="<?= e($_POST['noBoleta'] ?? '') ?>"></div>
+            <div class="field"><label for="numero_empleado">Número de empleado</label><input id="numero_empleado" name="numero_empleado" value="<?= e($_POST['numero_empleado'] ?? '') ?>"></div>
             <div class="field"><label for="rol">Rol</label><select id="rol" name="rol"><option value="estudiante">Estudiante</option><option value="profesor">Profesor</option><option value="miembroCatt">Miembro CATT</option></select></div>
             <div class="field"><label for="password">Contraseña</label><input id="password" name="password" type="password" minlength="8" required></div>
             <div class="field"><label for="confirm_password">Confirmar contraseña</label><input id="confirm_password" name="confirm_password" type="password" minlength="8" required></div>

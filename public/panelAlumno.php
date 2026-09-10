@@ -99,7 +99,7 @@ $proximasFechas = $query->fetchAll();
         <section class="dashboard-modal-content" aria-labelledby="modal-perfil-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
             <p class="eyebrow">Mi cuenta</p><h2 id="modal-perfil-title">Datos personales</h2><p class="modal-intro">Información asociada a tu cuenta de estudiante.</p>
-            <dl class="profile-details"><div><dt>Nombre completo</dt><dd><?= e($user['nombre']) ?></dd></div><div><dt>Correo electrónico</dt><dd><?= e($user['correo']) ?></dd></div><div><dt>Número de boleta</dt><dd><?= e($user['noBoleta']) ?></dd></div><div><dt>Rol</dt><dd>Estudiante</dd></div></dl>
+            <dl class="profile-details"><div><dt>Nombre completo</dt><dd><?= e(fullName($user)) ?></dd></div><div><dt>Correo electrónico</dt><dd><?= e($user['correo']) ?></dd></div><div><dt>Número de boleta</dt><dd><?= e($user['noBoleta']) ?></dd></div><div><dt>Rol</dt><dd>Estudiante</dd></div></dl>
         </section>
     <?php elseif ($modal === 'tramites'): ?>
         <section class="dashboard-modal-content" aria-labelledby="modal-tramites-title">

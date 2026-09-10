@@ -29,7 +29,7 @@ if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
 $startDate = $month . '-01';
 $endDate = date('Y-m-t', strtotime($startDate));
 $monthNames = [1 => 'ENERO', 2 => 'FEBRERO', 3 => 'MARZO', 4 => 'ABRIL', 5 => 'MAYO', 6 => 'JUNIO', 7 => 'JULIO', 8 => 'AGOSTO', 9 => 'SEPTIEMBRE', 10 => 'OCTUBRE', 11 => 'NOVIEMBRE', 12 => 'DICIEMBRE'];
-$query = database()->prepare('SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion, u.nombre AS profesor FROM calendario c JOIN usuario u ON u.id = c.profesor_id WHERE c.fecha <= ? AND (c.fecha_fin IS NULL OR c.fecha_fin >= ?) ORDER BY c.fecha, c.actividad');
+$query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion, CONCAT_WS(' ', u.nombre, u.apellido_paterno, u.apellido_materno) AS profesor FROM calendario c JOIN usuario u ON u.id = c.profesor_id WHERE c.fecha <= ? AND (c.fecha_fin IS NULL OR c.fecha_fin >= ?) ORDER BY c.fecha, c.actividad");
 $query->execute([$endDate, $startDate]);
 $activities = $query->fetchAll();
 $daysInMonth = (int) date('t', strtotime($startDate));
