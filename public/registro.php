@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($nombre === '' || $apellidoPaterno === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         $error = 'Completa todos los datos con un formato válido.';
-    } elseif (!in_array($rol, ['estudiante', 'profesor', 'miembroCatt'], true)) {
+    } elseif (!in_array($rol, ['estudiante', 'profesor', 'miembroCatt', 'admin'], true)) {
         $error = 'Selecciona un rol válido.';
     } elseif (($rol === 'estudiante' && $noBoleta === '') || ($rol !== 'estudiante' && $numeroEmpleado === '')) {
         $error = $rol === 'estudiante'

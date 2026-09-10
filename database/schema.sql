@@ -13,12 +13,12 @@ CREATE TABLE usuario (
     correo VARCHAR(160) NOT NULL UNIQUE,
   noBoleta VARCHAR(30) NULL UNIQUE,
   numero_empleado VARCHAR(30) NULL UNIQUE,
-    rol ENUM('estudiante', 'profesor', 'miembroCatt') NOT NULL DEFAULT 'estudiante',
+    rol ENUM('estudiante', 'profesor', 'miembroCatt', 'admin') NOT NULL DEFAULT 'estudiante',
     password_hash VARCHAR(255) NOT NULL,
   creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT chk_usuario_identificador CHECK (
     (rol = 'estudiante' AND noBoleta IS NOT NULL AND numero_empleado IS NULL)
-    OR (rol IN ('profesor', 'miembroCatt') AND numero_empleado IS NOT NULL AND noBoleta IS NULL)
+    OR (rol IN ('profesor', 'miembroCatt', 'admin') AND numero_empleado IS NOT NULL AND noBoleta IS NULL)
   )
 ) ENGINE=InnoDB;
 

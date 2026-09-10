@@ -27,6 +27,11 @@ function roleMenuItems(string $role): array
             'calendario' => ['label' => 'Calendario', 'url' => 'calendario.php'],
             'actividad' => ['label' => 'Nueva Actividad', 'url' => 'calendario.php#nueva-actividad']
         ],
+        'admin' => [
+            'inicio'   => ['label' => 'Inicio', 'url' => 'panelAdmin.php'],
+            'perfil'   => ['label' => 'Datos personales', 'url' => 'panelAdmin.php?modal=perfil'],
+            'usuarios' => ['label' => 'Usuarios', 'url' => 'panelAdmin.php?modal=usuarios'],
+        ],
     ];
 
     return $menuItems[$role] ?? $menuItems['estudiante'];

@@ -7,6 +7,7 @@ $userPanelUrl = $user ? match ($user['rol']) {
         'estudiante'   => 'panelAlumno.php',
         'profesor'     => 'panelProfesor.php',
         'miembroCatt'  => 'panelMiembroCatt.php',
+        'admin'        => 'panelAdmin.php',
         default        => 'calendario.php',
     }
     : 'calendario.php';
