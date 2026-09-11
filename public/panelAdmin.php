@@ -94,7 +94,7 @@ foreach ($usuarios as $usuario) {
 $pageTitle = 'Panel del Administrador';
 require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
-$modalPermitido = in_array($modal, ['perfil', 'usuarios'], true);
+$modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true);
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -193,34 +193,12 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios'], true);
             <h2 id="modal-usuarios-title">Usuarios</h2>
             <p class="modal-intro">Lista de la comunidad registrada. Agrega o da de baja usuarios.</p>
 
-            <div class="admin-table-wrap">
-                <table class="admin-table">
-                    <thead>
-                        <tr><th>Nombre</th><th>Correo</th><th>Boleta</th><th>Rol</th><th></th></tr>
-                    </thead>
-                    <tbody>
-                    <?php foreach ($usuarios as $usuario): ?>
-                        <tr>
-                            <td><?= e($usuario['nombre']) ?></td>
-                            <td><?= e($usuario['correo']) ?></td>
-                            <td><?= e($usuario['noBoleta']) ?></td>
-                            <td><?= e($rolLabels[$usuario['rol']] ?? $usuario['rol']) ?></td>
-                            <td>
-                                <?php if ((int) $usuario['id'] !== (int) $user['id']): ?>
-                                    <form method="post" class="admin-inline-form" onsubmit="return confirm('¿Eliminar a <?= e($usuario['nombre']) ?>? Esta acción no se puede deshacer.');">
-                                        <input type="hidden" name="formulario" value="baja_usuario">
-                                        <input type="hidden" name="usuario_id" value="<?= (int) $usuario['id'] ?>">
-                                        <button class="admin-delete" type="submit">Dar de baja</button>
-                                    </form>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <h3 class="admin-subheading">Agregar usuario</h3>
+            <a class="button button-gold admin-add-button" href="panelAdmin.php?modal=nuevo_usuario">+ Agregar usuario</a>
+        </section>
+    <?php elseif ($modal === 'nuevo_usuario'): ?>
+        <section class="dashboard-modal-content" aria-labelledby="modal-nuevo-usuario-title">
+            <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
+            <p class="eyebrow">Nueva cuenta</p><h2 id="modal-nuevo-usuario-title">Agregar usuario</h2><p class="modal-intro">Crea la cuenta de un nuevo usuario de la comunidad.</p>
             <form method="post" class="modal-form">
                 <input type="hidden" name="formulario" value="alta_usuario">
 
@@ -262,7 +240,7 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios'], true);
 .admin-inline-form { display: inline-block; margin: 0; }
 .admin-delete { background: transparent; border: 1px solid #c0392b; border-radius: 999px; color: #c0392b; cursor: pointer; font: inherit; font-size: .72rem; font-weight: 700; padding: 4px 12px; }
 .admin-delete:hover { background: #c0392b; color: #fff; }
-.admin-subheading { margin: 24px 0 0; }
+.admin-add-button { margin-top: 16px; }
 </style>
 <script>
 document.querySelectorAll('[data-close-modal]').forEach((element) => {
