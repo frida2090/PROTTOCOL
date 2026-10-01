@@ -5,7 +5,7 @@ CREATE DATABASE IF NOT EXISTS catt_prottocol
 USE catt_prottocol;
 SET NAMES utf8mb4;
 
---Usuarios del sistema
+-- Usuarios del sistema
 CREATE TABLE Usuarios (
     UserId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     Nombre VARCHAR(60) NOT NULL,
@@ -15,17 +15,17 @@ CREATE TABLE Usuarios (
     PasswordHash VARCHAR(255) NOT NULL
 );
 
---Extension de la tabla Usuario que contenga todos los roles que un usuario puede tener (Para casos como directores y sinodal al mismo tiempo)
+-- Extension de la tabla Usuario que contenga todos los roles que un usuario puede tener (Para casos como directores y sinodal al mismo tiempo)
 CREATE TABLE Usuario_Roles (
     UserId INT UNSIGNED NOT NULL,
     Rol ENUM('estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'admin', 'sinodal') NOT NULL,
-    PRIMARY KEY (UserId, Rol), --Evita roles repetidos para un mismo usuario
+    PRIMARY KEY (UserId, Rol), -- Evita roles repetidos para un mismo usuario
     CONSTRAINT fk_usuario_roles FOREIGN KEY (UserId) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
         ON DELETE CASCADE
 );
 
---Estructura de una Academia
+-- Estructura de una Academia
 CREATE TABLE Academia (
     AcadId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL
@@ -37,9 +37,9 @@ CREATE TABLE Academia_Departamento (
     AcadId INT UNSIGNED NOT NULL,
     CONSTRAINT fk_academia_departamento FOREIGN KEY (AcadId) REFERENCES Academia(AcadId)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT, --Impide borrar una academia por error si ya existen departamentos asociados
+        ON DELETE RESTRICT, -- Impide borrar una academia por error si ya existen departamentos asociados
     CONSTRAINT nombre_por_academia
-        UNIQUE (Nombre, AcadId) --Evita que existan dos departamentos con el mismo nombre en la misma academia
+        UNIQUE (Nombre, AcadId) -- Evita que existan dos departamentos con el mismo nombre en la misma academia
 );
 
 CREATE TABLE Empleado(
@@ -53,10 +53,10 @@ CREATE TABLE Empleado(
     CONSTRAINT fk_empleado_departamento 
         FOREIGN KEY (DeptId) REFERENCES Academia_Departamento(DeptId)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT --Impide borrar un departamento por error si ya existen empleados asociados
+        ON DELETE RESTRICT -- Impide borrar un departamento por error si ya existen empleados asociados
 );
 
---Se trabaja con la tabla equipo durante el periodo del proceso de Protocolo
+-- Se trabaja con la tabla equipo durante el periodo del proceso de Protocolo
 CREATE TABLE Equipo_TT(
     EquipoId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     TituloProtocolo VARCHAR(100) NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE TT(
     CONSTRAINT fk_tt_equipo 
         FOREIGN KEY (EquipoId) REFERENCES Equipo_TT(EquipoId)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT --Impide borrar un equipo por error si ya existe un TT asociado
+        ON DELETE RESTRICT -- Impide borrar un equipo por error si ya existe un TT asociado
 );
 
 CREATE TABLE Externo(
@@ -95,7 +95,7 @@ CREATE TABLE Estudiante(
     UserId INT UNSIGNED PRIMARY KEY,
     NumeroBoleta VARCHAR(10) NOT NULL UNIQUE,
     Creditos INT UNSIGNED NOT NULL,
-    EquipoId INT UNSIGNED NULL, --Un alumno solo pertenece a un equipo
+    EquipoId INT UNSIGNED NULL, -- Un alumno solo pertenece a un equipo
     CONSTRAINT fk_estudiante_usuario 
         FOREIGN KEY (UserId) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
@@ -103,10 +103,10 @@ CREATE TABLE Estudiante(
     CONSTRAINT fk_estudiante_equipo 
         FOREIGN KEY (EquipoId) REFERENCES Equipo_TT(EquipoId)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT --Impide borrar un equipo por error si ya existen estudiantes asociados
+        ON DELETE RESTRICT -- Impide borrar un equipo por error si ya existen estudiantes asociados
 );
 
---Permite que un empleado pueda pertenecer a varios equipos de TT
+-- Permite que un empleado pueda pertenecer a varios equipos de TT
 CREATE TABLE EmpleadoEquipo(
     UserId INT UNSIGNED NOT NULL,
     EquipoId INT UNSIGNED NOT NULL, 
@@ -125,7 +125,7 @@ CREATE TABLE Catalogo_Formatos(
     TipoFormatoId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     Clave ENUM('Protocolo', 'Solicitud de Modificacion') NOT NULL UNIQUE,
     Nombre VARCHAR(100) NOT NULL,
-    FormatoEjemplo MEDIUMBLOB NOT NULL --Archivos de ejemplo para que los usuarios se puedan guiar
+    FormatoEjemplo MEDIUMBLOB NOT NULL -- Archivos de ejemplo para que los usuarios se puedan guiar
 );
 
 CREATE TABLE Formatos_Subidos(
@@ -136,20 +136,20 @@ CREATE TABLE Formatos_Subidos(
     FechaSubida TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     Status ENUM('Pendiente', 'Aprobado', 'Rechazado') NOT NULL DEFAULT 'Pendiente',
     Observaciones TEXT NULL,
-    UserId INT UNSIGNED, --Usuario que revisa el formato (miembro Catt)
+    UserId INT UNSIGNED, -- Usuario que revisa el formato (miembro Catt)
     FechaRevision TIMESTAMP NULL,
     CONSTRAINT fk_formatos_subidos_equipo 
         FOREIGN KEY (EquipoId) REFERENCES Equipo_TT(EquipoId)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT, --Impide borrar un equipo por error si ya existen formatos asociados
+        ON DELETE RESTRICT, -- Impide borrar un equipo por error si ya existen formatos asociados
     CONSTRAINT fk_formatos_subidos_tipo_formato 
         FOREIGN KEY (TipoFormatoId) REFERENCES Catalogo_Formatos(TipoFormatoId)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT, --Impide borrar un tipo de formato por error si ya existen formatos asociados
+        ON DELETE RESTRICT, -- Impide borrar un tipo de formato por error si ya existen formatos asociados
     CONSTRAINT fk_formatos_subidos_usuario 
         FOREIGN KEY (UserId) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
-        ON DELETE SET NULL --Impide borrar un usuario por error si ya existen formatos asociados
+        ON DELETE SET NULL -- Impide borrar un usuario por error si ya existen formatos asociados
 );
 
 CREATE TABLE Formato_Protocolo (
@@ -161,13 +161,13 @@ CREATE TABLE Formato_Protocolo (
         ON DELETE CASCADE
 );
 
---Los jefes de academia revisan los formatos asociados a su academia y los pueden enviar al departamento correspondiente
+-- Los jefes de academia revisan los formatos asociados a su academia y los pueden enviar al departamento correspondiente
 CREATE TABLE Academia_Formato(
     AFormatoId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     AcadId INT UNSIGNED NOT NULL,
     FormatoId INT UNSIGNED NOT NULL,
     Status ENUM('Pendiente de asignar departamento', 'Departamento asignado'),
-    FechaRecibido TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, --Fecha cuando se recibio el formato?
+    FechaRecibido TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, -- Fecha cuando se recibio el formato?
     CONSTRAINT uq_acad_formato UNIQUE (AcadId, FormatoId),
     CONSTRAINT fk_af_academia 
         FOREIGN KEY (AcadId) REFERENCES Academia(AcadId)
@@ -214,18 +214,38 @@ CREATE TABLE calendario (
     fecha_fin DATE NULL,
     actividad VARCHAR(180) NOT NULL,
     descripcion TEXT NULL,
-    profesor_id INT UNSIGNED NOT NULL,
+    tipo_tt ENUM('TT1', 'TT2') NULL,
+    creado_por_user_id INT UNSIGNED NOT NULL,
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_calendario_profesor
-        FOREIGN KEY (profesor_id) REFERENCES usuario(id)
+    INDEX idx_calendario_fecha (fecha),
+    CONSTRAINT fk_calendario_creador
+        FOREIGN KEY (creado_por_user_id) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
     CONSTRAINT chk_calendario_rango
         CHECK (fecha_fin IS NULL OR fecha_fin >= fecha)
 ) ENGINE=InnoDB;
 
-INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, profesor_id)
-SELECT datos.fecha, datos.fecha_fin, datos.actividad, datos.descripcion, u.id
+CREATE TABLE calendario_participante (
+    calendario_id INT UNSIGNED NOT NULL,
+    UserId INT UNSIGNED NOT NULL,
+    Rol ENUM('estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'admin', 'sinodal') NOT NULL,
+    PRIMARY KEY (calendario_id, UserId, Rol),
+    INDEX idx_calendario_participante_usuario (UserId, Rol, calendario_id),
+    CONSTRAINT fk_calendario_participante_evento
+        FOREIGN KEY (calendario_id) REFERENCES calendario(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_calendario_participante_usuario_rol
+        FOREIGN KEY (UserId, Rol) REFERENCES Usuario_Roles(UserId, Rol)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT chk_calendario_participante_rol
+        CHECK (Rol <> 'admin')
+) ENGINE=InnoDB;
+
+INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, creado_por_user_id)
+SELECT datos.fecha, datos.fecha_fin, datos.actividad, datos.descripcion, u.UserId
 FROM (
     SELECT '2026-07-15' fecha, '2026-09-04' fecha_fin, 'Modificaciones al protocolo' actividad, '15 de julio al 4 de septiembre de 2026' descripcion
     UNION ALL SELECT '2026-08-25', NULL, 'Plática informativa (TT-I, TT-II y TTR 2027/1)', NULL
@@ -262,7 +282,7 @@ FROM (
   UNION ALL SELECT '2027-02-08', '2027-02-12', 'Segunda evaluación de protocolos (TTR)', '8 al 12 de febrero de 2027'
   UNION ALL SELECT '2027-02-15', NULL, 'Entrega de dictámenes reestructurados (TTR)', NULL
 ) datos
-JOIN usuario u ON u.correo = 'profesor@catt.local';
+JOIN Usuarios u ON u.Email = 'profesor@catt.local';
 
 
 

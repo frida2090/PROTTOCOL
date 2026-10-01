@@ -16,30 +16,61 @@ if($user['rol'] !== 'admin') {
 // Alta de un nuevo usuario por el administrador
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'alta_usuario') {
     $nombre          = trim($_POST['nombre'] ?? '');
+    $apellidoPaterno = trim($_POST['apellido_paterno'] ?? '');
+    $apellidoMaterno = trim($_POST['apellido_materno'] ?? '');
     $correo          = trim($_POST['correo'] ?? '');
     $noBoleta        = trim($_POST['noBoleta'] ?? '');
-    $rol             = $_POST['rol'] ?? 'estudiante';
+    $numeroEmpleado  = trim($_POST['numero_empleado'] ?? '');
+    $departamentoId  = (int) ($_POST['departamento_id'] ?? 0);
+    $rolesRaw        = $_POST['roles'] ?? [];
     $password        = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
 
-    $rolesPermitidos = ['estudiante', 'profesor', 'miembroCatt', 'admin'];
+    $rolesPermitidos = ['estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin'];
+    $roles = is_array($rolesRaw)
+        ? array_values(array_unique(array_map('strval', $rolesRaw)))
+        : [];
+    $rolesInvalidos = array_diff($roles, $rolesPermitidos);
+    $esEstudiante = in_array('estudiante', $roles, true);
+    $esEmpleado = (bool) array_intersect($roles, ['director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin']);
 
-    if ($nombre === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL) || $noBoleta === '') {
+    if ($nombre === '' || $apellidoPaterno === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         flash('error', 'Completa todos los datos con un formato válido.');
-    } elseif (!in_array($rol, $rolesPermitidos, true)) {
-        flash('error', 'Selecciona un rol válido.');
+    } elseif (!$roles || $rolesInvalidos) {
+        flash('error', 'Selecciona al menos un rol válido.');
+    } elseif (($esEstudiante && ($noBoleta === '' || strlen($noBoleta) > 10)) || ($esEmpleado && ($numeroEmpleado === '' || $departamentoId < 1))) {
+        flash('error', 'Completa el identificador y los datos académicos requeridos para el rol seleccionado.');
     } elseif (strlen($password) < 8) {
         flash('error', 'La contraseña debe tener al menos 8 caracteres.');
     } elseif ($password !== $confirmPassword) {
         flash('error', 'Las contraseñas no coinciden.');
     } else {
         try {
-            $query = database()->prepare('INSERT INTO usuario (nombre, correo, noBoleta, rol, password_hash) VALUES (?, ?, ?, ?, ?)');
-            $query->execute([$nombre, $correo, $noBoleta, $rol, password_hash($password, PASSWORD_DEFAULT)]);
+            $connection = database();
+            $connection->beginTransaction();
+            $query = $connection->prepare('INSERT INTO Usuarios (Nombre, ApellidoPaterno, ApellidoMaterno, Email, PasswordHash) VALUES (?, ?, ?, ?, ?)');
+            $query->execute([$nombre, $apellidoPaterno, $apellidoMaterno, $correo, password_hash($password, PASSWORD_DEFAULT)]);
+            $newUserId = (int) $connection->lastInsertId();
+            $roleQuery = $connection->prepare('INSERT INTO Usuario_Roles (UserId, Rol) VALUES (?, ?)');
+            foreach ($roles as $role) {
+                $roleQuery->execute([$newUserId, $role]);
+            }
+            if ($esEstudiante) {
+                $studentQuery = $connection->prepare('INSERT INTO Estudiante (UserId, NumeroBoleta, Creditos) VALUES (?, ?, 0)');
+                $studentQuery->execute([$newUserId, $noBoleta]);
+            }
+            if ($esEmpleado) {
+                $employeeQuery = $connection->prepare('INSERT INTO Empleado (UserId, NumeroEmpleado, DeptId) VALUES (?, ?, ?)');
+                $employeeQuery->execute([$newUserId, $numeroEmpleado, $departamentoId]);
+            }
+            $connection->commit();
             flash('success', 'El usuario fue creado correctamente.');
         } catch (PDOException $exception) {
+            if (isset($connection) && $connection->inTransaction()) {
+                $connection->rollBack();
+            }
             flash('error', $exception->getCode() === '23000'
-                ? 'El correo o número de boleta ya está registrado.'
+                ? 'El correo o identificador ya está registrado, o el departamento no existe.'
                 : 'No fue posible crear el usuario. Revisa la conexión con la base de datos.');
         }
     }
@@ -56,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'b
         flash('error', 'No puedes darte de baja a ti mismo.');
     } else {
         try {
-            $query = database()->prepare('DELETE FROM usuario WHERE id = ?');
+            $query = database()->prepare('DELETE FROM Usuarios WHERE UserId = ?');
             $query->execute([$usuarioId]);
             flash($query->rowCount() > 0 ? 'success' : 'error',
                 $query->rowCount() > 0
@@ -72,24 +103,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'b
 }
 
 $usuarios = [];
+$departamentos = [];
 try {
-    $query = database()->query('SELECT id, nombre, correo, noBoleta, rol, creado_en FROM usuario ORDER BY id');
+    $query = database()->query("SELECT u.UserId AS id, u.Nombre AS nombre, u.Email AS correo, e.NumeroBoleta AS noBoleta, em.NumeroEmpleado AS numero_empleado, GROUP_CONCAT(ur.Rol ORDER BY ur.Rol SEPARATOR ', ') AS roles FROM Usuarios u LEFT JOIN Estudiante e ON e.UserId = u.UserId LEFT JOIN Empleado em ON em.UserId = u.UserId LEFT JOIN Usuario_Roles ur ON ur.UserId = u.UserId GROUP BY u.UserId, u.Nombre, u.Email, e.NumeroBoleta, em.NumeroEmpleado ORDER BY u.UserId");
     $usuarios = $query->fetchAll();
+    $departamentos = database()->query('SELECT DeptId, Nombre FROM Academia_Departamento ORDER BY Nombre')->fetchAll();
 } catch (PDOException $exception) {
-    flash('error', 'No fue posible consultar la lista de usuarios.');
+    flash('error', 'No fue posible consultar usuarios o departamentos.');
 }
 
 $rolLabels = [
-    'estudiante'  => 'Estudiante',
-    'profesor'    => 'Profesor',
+    'estudiante' => 'Estudiante',
+    'director' => 'Director',
     'miembroCatt' => 'Miembro CATT',
-    'admin'       => 'Administrador',
+    'jefeAcademia' => 'Jefe de academia',
+    'sinodal' => 'Sinodal',
+    'admin' => 'Administrador',
 ];
 
-$conteoRoles = ['estudiante' => 0, 'profesor' => 0, 'miembroCatt' => 0, 'admin' => 0];
-foreach ($usuarios as $usuario) {
-    $conteoRoles[$usuario['rol']] = ($conteoRoles[$usuario['rol']] ?? 0) + 1;
+$conteoRoles = ['estudiante' => 0, 'director' => 0, 'sinodal' => 0, 'miembroCatt' => 0, 'jefeAcademia' => 0, 'admin' => 0];
+foreach ($usuarios as $index => $usuario) {
+    $userRoles = array_filter(array_map('trim', explode(',', $usuario['roles'] ?? '')));
+    foreach ($userRoles as $userRole) {
+        $conteoRoles[$userRole] = ($conteoRoles[$userRole] ?? 0) + 1;
+    }
+    $usuarios[$index]['roles_label'] = implode(', ', array_map(static fn (string $role): string => $rolLabels[$role] ?? $role, $userRoles));
 }
+$rolesFormulario = is_array($_POST['roles'] ?? null)
+    ? array_map('strval', $_POST['roles'])
+    : ['estudiante'];
 
 $pageTitle = 'Panel del Administrador';
 require __DIR__ . '/../app/views/header.php';
@@ -125,7 +167,7 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true
                 <h2>Docentes y CATT</h2>
                 <p class="card-copy">Profesores, miembros de la comisión y administradores.</p>
                 <div class="stat-row">
-                    <strong><?= $conteoRoles['profesor'] + $conteoRoles['miembroCatt'] + $conteoRoles['admin'] ?></strong>
+                    <strong><?= $conteoRoles['director'] + $conteoRoles['sinodal'] + $conteoRoles['miembroCatt'] + $conteoRoles['jefeAcademia'] + $conteoRoles['admin'] ?></strong>
                     <span>cuentas</span>
                 </div>
             </article>
@@ -198,15 +240,15 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true
             <div class="admin-table-wrap">
                 <table class="admin-table">
                     <thead>
-                        <tr><th>Nombre</th><th>Correo</th><th>Boleta</th><th>Rol</th><th>Acción</th></tr>
+                        <tr><th>Nombre</th><th>Correo</th><th>Identificador</th><th>Roles</th><th>Acción</th></tr>
                     </thead>
                     <tbody>
                     <?php foreach ($usuarios as $usuario): ?>
                         <tr>
                             <td><?= e($usuario['nombre']) ?></td>
                             <td><?= e($usuario['correo']) ?></td>
-                            <td><?= e($usuario['noBoleta']) ?></td>
-                            <td><?= e($rolLabels[$usuario['rol']] ?? $usuario['rol']) ?></td>
+                            <td><?= e($usuario['noBoleta'] ?: $usuario['numero_empleado']) ?></td>
+                            <td><?= e($usuario['roles_label']) ?></td>
                             <td>
                                 <?php if ((int) $usuario['id'] !== (int) $user['id']): ?>
                                     <form method="post" class="admin-inline-form" onsubmit="return confirm('¿Eliminar a <?= e($usuario['nombre']) ?>? Esta acción no se puede deshacer.');">
@@ -231,22 +273,33 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true
             <form method="post" class="modal-form">
                 <input type="hidden" name="formulario" value="alta_usuario">
 
-                <label for="nombre">Nombre completo</label>
+                <label for="nombre">Nombre(s)</label>
                 <input id="nombre" name="nombre" required value="<?= e($_POST['nombre'] ?? '') ?>">
+
+                <label for="apellido_paterno">Apellido paterno</label>
+                <input id="apellido_paterno" name="apellido_paterno" required value="<?= e($_POST['apellido_paterno'] ?? '') ?>">
+
+                <label for="apellido_materno">Apellido materno</label>
+                <input id="apellido_materno" name="apellido_materno" required value="<?= e($_POST['apellido_materno'] ?? '') ?>">
 
                 <label for="correo">Correo electrónico</label>
                 <input id="correo" name="correo" type="email" required value="<?= e($_POST['correo'] ?? '') ?>">
 
-                <label for="noBoleta">Número de boleta</label>
-                <input id="noBoleta" name="noBoleta" required value="<?= e($_POST['noBoleta'] ?? '') ?>">
+                <label for="noBoleta">Número de boleta (estudiante)</label>
+                <input id="noBoleta" name="noBoleta" value="<?= e($_POST['noBoleta'] ?? '') ?>">
 
-                <label for="rol">Rol</label>
-                <select id="rol" name="rol" required>
-                    <option value="estudiante">Estudiante</option>
-                    <option value="profesor">Profesor</option>
-                    <option value="miembroCatt">Miembro CATT</option>
-                    <option value="admin">Administrador</option>
-                </select>
+                <label for="numero_empleado">Número de empleado (personal)</label>
+                <input id="numero_empleado" name="numero_empleado" value="<?= e($_POST['numero_empleado'] ?? '') ?>">
+
+                <label for="departamento_id">Departamento (personal)</label>
+                <select id="departamento_id" name="departamento_id"><option value="">Selecciona departamento</option><?php foreach ($departamentos as $departamento): ?><option value="<?= e((string) $departamento['DeptId']) ?>"<?= (int) ($_POST['departamento_id'] ?? 0) === (int) $departamento['DeptId'] ? ' selected' : '' ?>><?= e($departamento['Nombre']) ?></option><?php endforeach; ?></select>
+
+                <fieldset class="admin-role-options">
+                    <legend>Roles</legend>
+                    <?php foreach ($rolLabels as $roleValue => $roleLabel): ?>
+                        <label><input type="checkbox" name="roles[]" value="<?= e($roleValue) ?>"<?= in_array($roleValue, $rolesFormulario, true) ? ' checked' : '' ?>> <?= e($roleLabel) ?></label>
+                    <?php endforeach; ?>
+                </fieldset>
 
                 <label for="password">Contraseña</label>
                 <input id="password" name="password" type="password" minlength="8" required>

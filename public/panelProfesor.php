@@ -42,8 +42,8 @@ require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
 $modalPermitido = in_array($modal, ['perfil', 'revisiones', 'dictamen'], true);
 
-$query = database()->prepare("SELECT fecha, fecha_fin, actividad, descripcion FROM calendario WHERE COALESCE(fecha_fin, fecha) >= CURRENT_DATE ORDER BY fecha ASC LIMIT 3");
-$query->execute();
+$query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion FROM calendario c WHERE COALESCE(c.fecha_fin, c.fecha) >= CURRENT_DATE AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?)) ORDER BY c.fecha ASC LIMIT 3");
+$query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
 ?>
 <div class="dashboard-container">

@@ -13,39 +13,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $apellidoMaterno = trim($_POST['apellido_materno'] ?? '');
     $correo = trim($_POST['correo'] ?? '');
     $noBoleta = trim($_POST['noBoleta'] ?? '');
-    $numeroEmpleado = trim($_POST['numero_empleado'] ?? '');
-    $rol = $_POST['rol'] ?? 'estudiante';
     $password = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
 
     if ($nombre === '' || $apellidoPaterno === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         $error = 'Completa todos los datos con un formato válido.';
-    } elseif (!in_array($rol, ['estudiante', 'profesor', 'miembroCatt', 'admin'], true)) {
-        $error = 'Selecciona un rol válido.';
-    } elseif (($rol === 'estudiante' && $noBoleta === '') || ($rol !== 'estudiante' && $numeroEmpleado === '')) {
-        $error = $rol === 'estudiante'
-            ? 'El número de boleta es obligatorio para estudiantes.'
-            : 'El número de empleado es obligatorio para profesores y miembros CATT.';
+    } elseif ($noBoleta === '' || strlen($noBoleta) > 10) {
+        $error = 'El número de boleta es obligatorio y debe tener 10 caracteres o menos.';
     } elseif (strlen($password) < 8) {
         $error = 'La contraseña debe tener al menos 8 caracteres.';
     } elseif ($password !== $confirmPassword) {
         $error = 'Las contraseñas no coinciden.';
     } else {
         try {
-            $query = database()->prepare('INSERT INTO usuario (nombre, apellido_paterno, apellido_materno, correo, noBoleta, numero_empleado, rol, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-            $query->execute([
-                $nombre,
-                $apellidoPaterno,
-                $apellidoMaterno !== '' ? $apellidoMaterno : null,
-                $correo,
-                $rol === 'estudiante' ? $noBoleta : null,
-                $rol !== 'estudiante' ? $numeroEmpleado : null,
-                $rol,
-                password_hash($password, PASSWORD_DEFAULT),
-            ]);
+            $connection = database();
+            $connection->beginTransaction();
+            $query = $connection->prepare('INSERT INTO Usuarios (Nombre, ApellidoPaterno, ApellidoMaterno, Email, PasswordHash) VALUES (?, ?, ?, ?, ?)');
+            $query->execute([$nombre, $apellidoPaterno, $apellidoMaterno, $correo, password_hash($password, PASSWORD_DEFAULT)]);
+            $userId = (int) $connection->lastInsertId();
+            $roleQuery = $connection->prepare('INSERT INTO Usuario_Roles (UserId, Rol) VALUES (?, \'estudiante\')');
+            $roleQuery->execute([$userId]);
+            $studentQuery = $connection->prepare('INSERT INTO Estudiante (UserId, NumeroBoleta, Creditos) VALUES (?, ?, 0)');
+            $studentQuery->execute([$userId, $noBoleta]);
+            $connection->commit();
             flash('success', 'Tu cuenta fue creada. Ya puedes iniciar sesión.');
             redirect('index.php');
         } catch (PDOException $exception) {
+            if (isset($connection) && $connection->inTransaction()) {
+                $connection->rollBack();
+            }
             $error = $exception->getCode() === '23000'
                 ? 'El correo o número de boleta ya está registrado.'
                 : 'No fue posible crear la cuenta. Revisa la conexión con la base de datos.';
@@ -67,15 +63,14 @@ require __DIR__ . '/../app/views/header.php';
         <form method="post" class="form-grid" novalidate>
             <div class="field"><label for="nombre">Nombre(s)</label><input id="nombre" name="nombre" required value="<?= e($_POST['nombre'] ?? '') ?>"></div>
             <div class="field"><label for="apellido_paterno">Apellido paterno</label><input id="apellido_paterno" name="apellido_paterno" required value="<?= e($_POST['apellido_paterno'] ?? '') ?>"></div>
-            <div class="field"><label for="apellido_materno">Apellido materno</label><input id="apellido_materno" name="apellido_materno" value="<?= e($_POST['apellido_materno'] ?? '') ?>"></div>
+            <div class="field"><label for="apellido_materno">Apellido materno</label><input id="apellido_materno" name="apellido_materno" required value="<?= e($_POST['apellido_materno'] ?? '') ?>"></div>
             <div class="field"><label for="correo">Correo electrónico</label><input id="correo" name="correo" type="email" required value="<?= e($_POST['correo'] ?? '') ?>"></div>
             <div class="field"><label for="noBoleta">Número de boleta</label><input id="noBoleta" name="noBoleta" value="<?= e($_POST['noBoleta'] ?? '') ?>"></div>
-            <div class="field"><label for="numero_empleado">Número de empleado</label><input id="numero_empleado" name="numero_empleado" value="<?= e($_POST['numero_empleado'] ?? '') ?>"></div>
-            <div class="field"><label for="rol">Rol</label><select id="rol" name="rol"><option value="estudiante">Estudiante</option><option value="profesor">Profesor</option><option value="miembroCatt">Miembro CATT</option></select></div>
             <div class="field"><label for="password">Contraseña</label><input id="password" name="password" type="password" minlength="8" required></div>
             <div class="field"><label for="confirm_password">Confirmar contraseña</label><input id="confirm_password" name="confirm_password" type="password" minlength="8" required></div>
             <div class="field-full"><button class="button button-primary" type="submit">Crear mi cuenta <span>→</span></button></div>
         </form>
+        <p class="form-note">El registro crea cuentas de estudiante. Los demás roles son asignados por la administración.</p>
         <p class="form-note">¿Ya tienes una cuenta? <a href="index.php">Inicia sesión</a></p>
     </div>
 </section>

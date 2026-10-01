@@ -23,7 +23,7 @@ function requireAuth(): void
 
 function attemptLogin(string $correo, string $password): bool
 {
-    $query = database()->prepare('SELECT id, nombre, apellido_paterno, apellido_materno, correo, noBoleta, numero_empleado, rol, password_hash FROM usuario WHERE correo = ? LIMIT 1');
+    $query = database()->prepare('SELECT u.UserId AS id, u.Nombre AS nombre, u.ApellidoPaterno AS apellido_paterno, u.ApellidoMaterno AS apellido_materno, u.Email AS correo, e.NumeroBoleta AS noBoleta, em.NumeroEmpleado AS numero_empleado, u.PasswordHash AS password_hash FROM Usuarios u LEFT JOIN Estudiante e ON e.UserId = u.UserId LEFT JOIN Empleado em ON em.UserId = u.UserId WHERE u.Email = ? LIMIT 1');
     $query->execute([$correo]);
     $user = $query->fetch();
 
@@ -31,6 +31,19 @@ function attemptLogin(string $correo, string $password): bool
         return false;
     }
 
+    $rolesQuery = database()->prepare('SELECT Rol FROM Usuario_Roles WHERE UserId = ? ORDER BY FIELD(Rol, \'admin\', \'miembroCatt\', \'jefeAcademia\', \'director\', \'sinodal\', \'estudiante\')');
+    $rolesQuery->execute([$user['id']]);
+    $roles = $rolesQuery->fetchAll(PDO::FETCH_COLUMN);
+    if (!$roles) {
+        return false;
+    }
+
+    $user['roles'] = $roles;
+    $user['rol'] = match ($roles[0]) {
+        'director', 'sinodal' => 'profesor',
+        'jefeAcademia' => 'miembroCatt',
+        default => $roles[0],
+    };
     unset($user['password_hash']);
     session_regenerate_id(true);
     $_SESSION['user'] = $user;

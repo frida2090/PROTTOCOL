@@ -10,7 +10,7 @@ Sistema web que centraliza todo lo que necesitas saber de la CATT en un solo lug
 
 ## Instalación
 
-1. Cree la base de datos importando `database/schema.sql`.
+1. Cree la base de datos importando `database/PROTTOCOL.sql`, que contiene el modelo normalizado con `Usuarios` y `Usuario_Roles`.
 2. Configure las credenciales en `config/database.php` o mediante variables de entorno:
    - `DB_HOST`
    - `DB_NAME`
@@ -24,7 +24,7 @@ php -S localhost:8000 -t public
 
 4. Abra `http://localhost:8000`.
 
-El registro permite crear estudiantes, profesores y miembros CATT. El calendario de actividades es público; los profesores y miembros CATT pueden iniciar sesión para publicar nuevas actividades.
+El modelo normalizado permite asignar cada evento de calendario a usuarios junto con uno de sus roles (`estudiante`, `director`, `miembroCatt`, `jefeAcademia` o `sinodal`). La relación valida el rol contra `Usuario_Roles`, por lo que un usuario puede recibir una misma fecha en varios roles. Para una base existente con las tablas anteriores `usuario` y `calendario`, respalde primero la base, renombre `calendario` a `calendario_legacy`, ejecute `database/PROTTOCOL.sql` completo y después ejecute `database/migrations/20261001_migrar_datos_a_PROTTOCOL.sql`. Verifique los datos antes de retirar las tablas antiguas; la migración conserva las cuentas y eventos, asigna `profesor` al rol nuevo `director` y usa un departamento provisional para el empleado heredado.
 
 ## Estructura
 

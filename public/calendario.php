@@ -3,9 +3,88 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 
 $user = currentUser();
-$canManage = $user && in_array($user['rol'], ['profesor', 'miembroCatt'], true);
+$userRoles = $user['roles'] ?? [];
+$canManage = (bool) array_intersect($userRoles, ['director', 'miembroCatt', 'jefeAcademia']);
+$canAssignPresentations = (bool) array_intersect($userRoles, ['miembroCatt', 'jefeAcademia']);
 $error = null;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManage) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'presentacion' && $canAssignPresentations) {
+    $fecha = trim($_POST['fecha_presentacion'] ?? '');
+    $tipoTT = $_POST['tipo_tt'] ?? '';
+    $alumnoId = (int) ($_POST['alumno_id'] ?? 0);
+    $directorId = (int) ($_POST['director_id'] ?? 0);
+    $sinodalesRaw = $_POST['sinodales'] ?? [];
+    $sinodalIds = is_array($sinodalesRaw)
+        ? array_values(array_unique(array_filter(array_map('intval', $sinodalesRaw), static fn (int $id): bool => $id > 0)))
+        : [];
+
+    $fechaValida = preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) === 1
+        && checkdate((int) substr($fecha, 5, 2), (int) substr($fecha, 8, 2), (int) substr($fecha, 0, 4));
+    if (!$fechaValida || !in_array($tipoTT, ['TT1', 'TT2'], true) || $alumnoId < 1 || $directorId < 1 || !$sinodalIds) {
+        $error = 'Completa una fecha válida, el tipo de TT, el alumno, el director y al menos un sinodal.';
+    } else {
+        $selectedIds = array_values(array_unique(array_merge([$alumnoId, $directorId], $sinodalIds)));
+        $placeholders = implode(', ', array_fill(0, count($selectedIds), '?'));
+        $usersQuery = database()->prepare("SELECT UserId AS id, Nombre AS nombre, ApellidoPaterno AS apellido_paterno, ApellidoMaterno AS apellido_materno FROM Usuarios WHERE UserId IN ({$placeholders})");
+        $usersQuery->execute($selectedIds);
+        $selectedUsers = $usersQuery->fetchAll();
+        $usersById = [];
+        foreach ($selectedUsers as $selectedUser) {
+            $usersById[(int) $selectedUser['id']] = $selectedUser;
+        }
+        $roleQuery = database()->prepare("SELECT UserId, Rol FROM Usuario_Roles WHERE UserId IN ({$placeholders})");
+        $roleQuery->execute($selectedIds);
+        $rolesByUser = [];
+        foreach ($roleQuery->fetchAll() as $roleRow) {
+            $rolesByUser[(int) $roleRow['UserId']][] = $roleRow['Rol'];
+        }
+        $cattQuery = database()->query("SELECT UserId, Rol FROM Usuario_Roles WHERE Rol IN ('miembroCatt', 'jefeAcademia')");
+        $cattParticipants = $cattQuery->fetchAll();
+        $rolesValidos = count($usersById) === count($selectedIds)
+            && in_array('estudiante', $rolesByUser[$alumnoId] ?? [], true)
+            && in_array('director', $rolesByUser[$directorId] ?? [], true);
+        foreach ($sinodalIds as $sinodalId) {
+            $rolesValidos = $rolesValidos && in_array('sinodal', $rolesByUser[$sinodalId] ?? [], true);
+        }
+
+        if (!$rolesValidos) {
+            $error = 'El alumno, director y sinodales seleccionados no tienen los roles esperados.';
+        } elseif (!$cattParticipants) {
+            $error = 'Registra al menos un miembro CATT o jefe de academia antes de programar presentaciones.';
+        } else {
+            $alumno = fullName($usersById[$alumnoId]);
+            $director = fullName($usersById[$directorId]);
+            $sinodales = array_map(static fn (int $id): string => fullName($usersById[$id]), $sinodalIds);
+            $actividad = "Presentación de {$tipoTT}";
+            $descripcion = 'Alumno: ' . $alumno . ' | Director: ' . $director . ' | Sinodales: ' . implode(', ', $sinodales);
+            $connection = database();
+            try {
+                $connection->beginTransaction();
+                $eventQuery = $connection->prepare('INSERT INTO calendario (fecha, actividad, descripcion, tipo_tt, creado_por_user_id) VALUES (?, ?, ?, ?, ?)');
+                $eventQuery->execute([$fecha, $actividad, $descripcion, $tipoTT, $user['id']]);
+                $calendarId = (int) $connection->lastInsertId();
+                $participantQuery = $connection->prepare('INSERT INTO calendario_participante (calendario_id, UserId, Rol) VALUES (?, ?, ?)');
+                $participantQuery->execute([$calendarId, $alumnoId, 'estudiante']);
+                $participantQuery->execute([$calendarId, $directorId, 'director']);
+                foreach ($sinodalIds as $sinodalId) {
+                    $participantQuery->execute([$calendarId, $sinodalId, 'sinodal']);
+                }
+                foreach ($cattParticipants as $cattParticipant) {
+                    $participantQuery->execute([$calendarId, (int) $cattParticipant['UserId'], $cattParticipant['Rol']]);
+                }
+                $connection->commit();
+                flash('success', "La fecha de {$tipoTT} fue asignada al estudiante, director, sinodales, CATT y jefes de academia.");
+                redirect('calendario.php');
+            } catch (Throwable $exception) {
+                if ($connection->inTransaction()) {
+                    $connection->rollBack();
+                }
+                $error = 'No fue posible guardar la fecha de presentación. Intenta de nuevo.';
+            }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'actividad' && $canManage) {
     $fecha = $_POST['fecha'] ?? '';
     $fechaFin = $_POST['fecha_fin'] ?? '';
     $actividad = trim($_POST['actividad'] ?? '');
@@ -15,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canManage) {
     } elseif ($fechaFin !== '' && $fechaFin < $fecha) {
         $error = 'La fecha final no puede ser anterior a la fecha de inicio.';
     } else {
-        $query = database()->prepare('INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, profesor_id) VALUES (?, ?, ?, ?, ?)');
+        $query = database()->prepare('INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, creado_por_user_id) VALUES (?, ?, ?, ?, ?)');
         $query->execute([$fecha, $fechaFin ?: null, $actividad, $descripcion ?: null, $user['id']]);
         flash('success', 'La actividad fue agregada al calendario.');
         redirect('calendario.php');
@@ -29,8 +108,14 @@ if (!preg_match('/^\d{4}-\d{2}$/', $month)) {
 $startDate = $month . '-01';
 $endDate = date('Y-m-t', strtotime($startDate));
 $monthNames = [1 => 'ENERO', 2 => 'FEBRERO', 3 => 'MARZO', 4 => 'ABRIL', 5 => 'MAYO', 6 => 'JUNIO', 7 => 'JULIO', 8 => 'AGOSTO', 9 => 'SEPTIEMBRE', 10 => 'OCTUBRE', 11 => 'NOVIEMBRE', 12 => 'DICIEMBRE'];
-$query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion, CONCAT_WS(' ', u.nombre, u.apellido_paterno, u.apellido_materno) AS profesor FROM calendario c JOIN usuario u ON u.id = c.profesor_id WHERE c.fecha <= ? AND (c.fecha_fin IS NULL OR c.fecha_fin >= ?) ORDER BY c.fecha, c.actividad");
-$query->execute([$endDate, $startDate]);
+$students = $canAssignPresentations ? database()->query("SELECT u.UserId AS id, u.Nombre AS nombre, u.ApellidoPaterno AS apellido_paterno, u.ApellidoMaterno AS apellido_materno, e.NumeroBoleta AS noBoleta FROM Usuarios u JOIN Estudiante e ON e.UserId = u.UserId JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'estudiante' ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll() : [];
+$directors = $canAssignPresentations ? database()->query("SELECT u.UserId AS id, u.Nombre AS nombre, u.ApellidoPaterno AS apellido_paterno, u.ApellidoMaterno AS apellido_materno, em.NumeroEmpleado AS numero_empleado FROM Usuarios u JOIN Empleado em ON em.UserId = u.UserId JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'director' ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll() : [];
+$sinodals = $canAssignPresentations ? database()->query("SELECT u.UserId AS id, u.Nombre AS nombre, u.ApellidoPaterno AS apellido_paterno, u.ApellidoMaterno AS apellido_materno, em.NumeroEmpleado AS numero_empleado FROM Usuarios u JOIN Empleado em ON em.UserId = u.UserId JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'sinodal' ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll() : [];
+$visibilitySql = $user
+    ? 'AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?))'
+    : 'AND c.tipo_tt IS NULL';
+$query = database()->prepare("SELECT c.id, c.fecha, c.fecha_fin, c.actividad, c.descripcion, c.tipo_tt, CONCAT_WS(' ', u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno) AS creador FROM calendario c JOIN Usuarios u ON u.UserId = c.creado_por_user_id WHERE c.fecha <= ? AND (c.fecha_fin IS NULL OR c.fecha_fin >= ?) {$visibilitySql} ORDER BY c.fecha, c.actividad");
+$query->execute($user ? [$endDate, $startDate, $user['id']] : [$endDate, $startDate]);
 $activities = $query->fetchAll();
 $daysInMonth = (int) date('t', strtotime($startDate));
 $firstWeekday = (int) date('N', strtotime($startDate));
@@ -68,7 +153,7 @@ require __DIR__ . '/../app/views/header.php';
     <?php for ($dayNumber = 1; $dayNumber <= $daysInMonth; $dayNumber++): $dateKey = $month . '-' . str_pad((string) $dayNumber, 2, '0', STR_PAD_LEFT); ?>
         <div class="calendar-day<?= $dateKey === $today ? ' calendar-day-today' : '' ?>">
             <span class="day-number"><?= $dayNumber ?></span>
-            <?php foreach ($activitiesByDay[$dateKey] ?? [] as $activity): ?><a class="calendar-event" href="#actividad-<?= e($activity['fecha']) ?>-<?= e((string) $dayNumber) ?>" title="<?= e($activity['actividad']) ?>"><?= e($activity['actividad']) ?></a><?php endforeach; ?>
+            <?php foreach ($activitiesByDay[$dateKey] ?? [] as $activity): ?><a class="calendar-event" href="#actividad-<?= e((string) $activity['id']) ?>" title="<?= e($activity['actividad']) ?>"><?= e($activity['actividad']) ?></a><?php endforeach; ?>
         </div>
     <?php endfor; ?>
 </section>
@@ -76,10 +161,13 @@ require __DIR__ . '/../app/views/header.php';
 <?php if (!$activities): ?>
     <div class="empty-state"><span>◌</span><h2>Este mes aún está libre</h2><p>No hay actividades registradas para el periodo seleccionado.</p></div>
 <?php else: foreach ($activities as $activity): ?>
-    <article class="activity-item" id="actividad-<?= e($activity['fecha']) ?>-<?= e((string) date('d', strtotime($activity['fecha']))) ?>"><time datetime="<?= e($activity['fecha']) ?>"><strong><?= e(date('d', strtotime($activity['fecha']))) ?></strong><span><?= e(substr($monthNames[(int) date('n', strtotime($activity['fecha']))], 0, 3)) ?></span></time><div><h2><?= e($activity['actividad']) ?></h2><p><?= e($activity['descripcion'] ?: 'Actividad académica CATT') ?></p><?php if ($activity['fecha_fin']): ?><small class="date-range">Hasta <?= e(date('d/m/Y', strtotime($activity['fecha_fin']))) ?></small><?php endif; ?><small>Imparte <?= e($activity['profesor']) ?></small></div></article>
+    <article class="activity-item" id="actividad-<?= e((string) $activity['id']) ?>"><time datetime="<?= e($activity['fecha']) ?>"><strong><?= e(date('d', strtotime($activity['fecha']))) ?></strong><span><?= e(substr($monthNames[(int) date('n', strtotime($activity['fecha']))], 0, 3)) ?></span></time><div><h2><?= e($activity['actividad']) ?></h2><p><?= e($activity['descripcion'] ?: 'Actividad académica CATT') ?></p><?php if ($activity['tipo_tt']): ?><small class="date-range"><?= e($activity['tipo_tt']) ?></small><?php endif; ?><?php if ($activity['fecha_fin']): ?><small class="date-range">Hasta <?= e(date('d/m/Y', strtotime($activity['fecha_fin']))) ?></small><?php endif; ?><small>Registró <?= e($activity['creador']) ?></small></div></article>
 <?php endforeach; endif; ?>
 </div>
+<?php if ($canAssignPresentations): ?>
+<section class="new-activity"><div><p class="eyebrow">Asignación CATT</p><h2>Programar presentación TT</h2><p>La fecha se compartirá con estudiante, director, sinodales, CATT y jefes de academia.</p></div><form method="post" class="activity-form"><input type="hidden" name="formulario" value="presentacion"><label for="tipo_tt">Trabajo terminal</label><select id="tipo_tt" name="tipo_tt" required><option value="">Selecciona TT1 o TT2</option><option value="TT1">TT1</option><option value="TT2">TT2</option></select><label for="fecha_presentacion">Fecha de presentación</label><input id="fecha_presentacion" name="fecha_presentacion" type="date" required><label for="alumno_id">Estudiante</label><select id="alumno_id" name="alumno_id" required><option value="">Selecciona un estudiante</option><?php foreach ($students as $student): ?><option value="<?= e((string) $student['id']) ?>"><?= e(fullName($student)) ?> · <?= e($student['noBoleta']) ?></option><?php endforeach; ?></select><label for="director_id">Director</label><select id="director_id" name="director_id" required><option value="">Selecciona un director</option><?php foreach ($directors as $director): ?><option value="<?= e((string) $director['id']) ?>"><?= e(fullName($director)) ?> · <?= e($director['numero_empleado']) ?></option><?php endforeach; ?></select><fieldset><legend>Sinodales</legend><?php foreach ($sinodals as $sinodal): ?><label><input type="checkbox" name="sinodales[]" value="<?= e((string) $sinodal['id']) ?>"> <?= e(fullName($sinodal)) ?></label><?php endforeach; ?></fieldset><button class="button button-primary" type="submit">Asignar fecha</button></form></section>
+<?php endif; ?>
 <?php if ($canManage): ?>
-<section id="nueva-actividad" class="new-activity"><div><p class="eyebrow">Gestión</p><h2>Agregar una actividad</h2><p>Completa los datos para compartirla con la comunidad.</p></div><form method="post" class="activity-form"><label for="fecha">Fecha de inicio</label><input id="fecha" name="fecha" type="date" required><label for="fecha_fin">Fecha final <span>(opcional)</span></label><input id="fecha_fin" name="fecha_fin" type="date"><label for="actividad">Actividad</label><input id="actividad" name="actividad" required placeholder="Nombre de la actividad"><label for="descripcion">Descripción <span>(opcional)</span></label><textarea id="descripcion" name="descripcion" rows="3"></textarea><button class="button button-primary" type="submit">Publicar actividad</button></form></section>
+<section id="nueva-actividad" class="new-activity"><div><p class="eyebrow">Gestión</p><h2>Agregar una actividad</h2><p>Completa los datos para compartirla con la comunidad.</p></div><form method="post" class="activity-form"><input type="hidden" name="formulario" value="actividad"><label for="fecha">Fecha de inicio</label><input id="fecha" name="fecha" type="date" required><label for="fecha_fin">Fecha final <span>(opcional)</span></label><input id="fecha_fin" name="fecha_fin" type="date"><label for="actividad">Actividad</label><input id="actividad" name="actividad" required placeholder="Nombre de la actividad"><label for="descripcion">Descripción <span>(opcional)</span></label><textarea id="descripcion" name="descripcion" rows="3"></textarea><button class="button button-primary" type="submit">Publicar actividad</button></form></section>
 <?php endif; ?>
 <?php require __DIR__ . '/../app/views/footer.php'; ?>
