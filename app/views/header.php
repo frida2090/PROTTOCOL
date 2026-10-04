@@ -29,6 +29,7 @@ $userPanelUrl = $user ? match ($user['rol']) {
     <nav class="main-nav" aria-label="Navegación principal">
         <?php if ($user): ?>
             <a href="calendario.php">Calendario</a>
+            <a href="directorio.php">Directorio académico</a>
             <a class="user-chip" href="<?= e($userPanelUrl) ?>" title="Abrir mi panel"><?= e(fullName($user)) ?></a>
             <a class="nav-logout" href="logout.php">Salir</a>
         <?php else: ?>
@@ -36,6 +37,7 @@ $userPanelUrl = $user ? match ($user['rol']) {
             <a href="index.php#procesos">Procesos</a>
             <a href="index.php#formularios">Formularios</a>
             <a href="calendario.php">Actividades</a>
+            <a href="directorio.php">Docentes</a>
             <a href="login.php">Iniciar sesión</a>
             <a class="nav-register" href="registro.php">Crear cuenta</a>
         <?php endif; ?>

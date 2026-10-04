@@ -13,6 +13,16 @@ if($user['rol'] !== 'admin') {
     redirect('login.php');
 }
 
+$rolesPermitidos = ['estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin'];
+$rolLabels = [
+    'estudiante' => 'Estudiante',
+    'director' => 'Director',
+    'miembroCatt' => 'Miembro CATT',
+    'jefeAcademia' => 'Jefe de academia',
+    'sinodal' => 'Sinodal',
+    'admin' => 'Administrador',
+];
+
 // Alta de un nuevo usuario por el administrador
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'alta_usuario') {
     $nombre          = trim($_POST['nombre'] ?? '');
@@ -22,17 +32,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
     $noBoleta        = trim($_POST['noBoleta'] ?? '');
     $numeroEmpleado  = trim($_POST['numero_empleado'] ?? '');
     $departamentoId  = (int) ($_POST['departamento_id'] ?? 0);
+    $docenteCatalogoId = (int) ($_POST['docente_catalogo_id'] ?? 0);
     $rolesRaw        = $_POST['roles'] ?? [];
     $password        = $_POST['password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
 
-    $rolesPermitidos = ['estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin'];
     $roles = is_array($rolesRaw)
         ? array_values(array_unique(array_map('strval', $rolesRaw)))
         : [];
     $rolesInvalidos = array_diff($roles, $rolesPermitidos);
     $esEstudiante = in_array('estudiante', $roles, true);
     $esEmpleado = (bool) array_intersect($roles, ['director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin']);
+    $esDocente = (bool) array_intersect($roles, ['director', 'sinodal']);
 
     if ($nombre === '' || $apellidoPaterno === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         flash('error', 'Completa todos los datos con un formato válido.');
@@ -40,6 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
         flash('error', 'Selecciona al menos un rol válido.');
     } elseif (($esEstudiante && ($noBoleta === '' || strlen($noBoleta) > 10)) || ($esEmpleado && ($numeroEmpleado === '' || $departamentoId < 1))) {
         flash('error', 'Completa el identificador y los datos académicos requeridos para el rol seleccionado.');
+    } elseif ($docenteCatalogoId > 0 && !$esDocente) {
+        flash('error', 'Para vincular un registro del catálogo, asigna el rol Director o Sinodal.');
     } elseif (strlen($password) < 8) {
         flash('error', 'La contraseña debe tener al menos 8 caracteres.');
     } elseif ($password !== $confirmPassword) {
@@ -51,9 +64,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
             $query = $connection->prepare('INSERT INTO Usuarios (Nombre, ApellidoPaterno, ApellidoMaterno, Email, PasswordHash) VALUES (?, ?, ?, ?, ?)');
             $query->execute([$nombre, $apellidoPaterno, $apellidoMaterno, $correo, password_hash($password, PASSWORD_DEFAULT)]);
             $newUserId = (int) $connection->lastInsertId();
+            if ($docenteCatalogoId > 0) {
+                $catalogCheck = $connection->prepare('SELECT UserId FROM DocentesCatalogo WHERE DocenteId = ? FOR UPDATE');
+                $catalogCheck->execute([$docenteCatalogoId]);
+                $linkedUserId = $catalogCheck->fetchColumn();
+                if ($linkedUserId !== false && $linkedUserId !== null) {
+                    throw new DomainException('El docente seleccionado ya está vinculado a una cuenta.');
+                }
+            }
             $roleQuery = $connection->prepare('INSERT INTO Usuario_Roles (UserId, Rol) VALUES (?, ?)');
             foreach ($roles as $role) {
                 $roleQuery->execute([$newUserId, $role]);
+            }
+            if (in_array('admin', $roles, true)) {
+                $adminQuery = $connection->prepare('INSERT INTO Administradores (UserId) VALUES (?)');
+                $adminQuery->execute([$newUserId]);
             }
             if ($esEstudiante) {
                 $studentQuery = $connection->prepare('INSERT INTO Estudiante (UserId, NumeroBoleta, Creditos) VALUES (?, ?, 0)');
@@ -63,8 +88,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
                 $employeeQuery = $connection->prepare('INSERT INTO Empleado (UserId, NumeroEmpleado, DeptId) VALUES (?, ?, ?)');
                 $employeeQuery->execute([$newUserId, $numeroEmpleado, $departamentoId]);
             }
+            if ($docenteCatalogoId > 0) {
+                $linkQuery = $connection->prepare('UPDATE DocentesCatalogo SET UserId = ? WHERE DocenteId = ? AND UserId IS NULL');
+                $linkQuery->execute([$newUserId, $docenteCatalogoId]);
+                if ($linkQuery->rowCount() !== 1) {
+                    throw new DomainException('El registro de docente ya fue vinculado por otra operación.');
+                }
+            }
             $connection->commit();
-            flash('success', 'El usuario fue creado correctamente.');
+            flash('success', $docenteCatalogoId > 0
+                ? 'La cuenta docente fue creada y vinculada al catálogo.'
+                : 'El usuario fue creado correctamente.');
+        } catch (DomainException $exception) {
+            if (isset($connection) && $connection->inTransaction()) {
+                $connection->rollBack();
+            }
+            flash('error', $exception->getMessage());
         } catch (PDOException $exception) {
             if (isset($connection) && $connection->inTransaction()) {
                 $connection->rollBack();
@@ -73,6 +112,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
                 ? 'El correo o identificador ya está registrado, o el departamento no existe.'
                 : 'No fue posible crear el usuario. Revisa la conexión con la base de datos.');
         }
+    }
+    redirect('panelAdmin.php?modal=usuarios');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'actualizar_roles') {
+    $targetUserId = (int) ($_POST['usuario_id'] ?? 0);
+    $submittedRoles = $_POST['roles_actualizados'] ?? [];
+    $newRoles = is_array($submittedRoles)
+        ? array_values(array_unique(array_map('strval', $submittedRoles)))
+        : [];
+    $rolesInvalidos = array_diff($newRoles, $rolesPermitidos);
+
+    try {
+        if ($targetUserId < 1 || !$newRoles || $rolesInvalidos) {
+            throw new DomainException('Selecciona al menos un rol válido para el usuario.');
+        }
+
+        $connection = database();
+        $connection->beginTransaction();
+        $targetQuery = $connection->prepare('SELECT UserId FROM Usuarios WHERE UserId = ? FOR UPDATE');
+        $targetQuery->execute([$targetUserId]);
+        if ($targetQuery->fetchColumn() === false) {
+            throw new DomainException('El usuario seleccionado ya no existe.');
+        }
+
+        $currentRoleQuery = $connection->prepare('SELECT Rol FROM Usuario_Roles WHERE UserId = ?');
+        $currentRoleQuery->execute([$targetUserId]);
+        $currentRoles = $currentRoleQuery->fetchAll(PDO::FETCH_COLUMN);
+        $addingRoles = array_diff($newRoles, $currentRoles);
+        $removingRoles = array_diff($currentRoles, $newRoles);
+        $employeeRoles = ['director', 'miembroCatt', 'jefeAcademia', 'sinodal'];
+
+        if (in_array('estudiante', $addingRoles, true)) {
+            $studentQuery = $connection->prepare('SELECT COUNT(*) FROM Estudiante WHERE UserId = ?');
+            $studentQuery->execute([$targetUserId]);
+            if ((int) $studentQuery->fetchColumn() === 0) {
+                throw new DomainException('No se puede asignar Estudiante: primero debe existir su registro en Estudiante y su número de boleta.');
+            }
+        }
+        if (array_intersect($addingRoles, $employeeRoles)) {
+            $employeeQuery = $connection->prepare('SELECT COUNT(*) FROM Empleado WHERE UserId = ?');
+            $employeeQuery->execute([$targetUserId]);
+            if ((int) $employeeQuery->fetchColumn() === 0) {
+                throw new DomainException('No se pueden asignar roles docentes/CATT: primero debe existir su registro en Empleado.');
+            }
+        }
+        if (in_array('admin', $currentRoles, true) && !in_array('admin', $newRoles, true)) {
+            $adminCount = (int) $connection->query("SELECT COUNT(*) FROM Usuario_Roles WHERE Rol = 'admin'")->fetchColumn();
+            if ($adminCount <= 1) {
+                throw new DomainException('No se puede quitar el último rol de administrador.');
+            }
+            $adminDelete = $connection->prepare('DELETE FROM Administradores WHERE UserId = ?');
+            $adminDelete->execute([$targetUserId]);
+        }
+        if ($targetUserId === (int) $user['id'] && in_array('admin', $removingRoles, true)) {
+            throw new DomainException('No puedes quitarte tu propio rol de administrador.');
+        }
+
+        $deleteRole = $connection->prepare('DELETE FROM Usuario_Roles WHERE UserId = ? AND Rol = ?');
+        foreach ($removingRoles as $role) {
+            $deleteRole->execute([$targetUserId, $role]);
+        }
+        $insertRole = $connection->prepare('INSERT INTO Usuario_Roles (UserId, Rol) VALUES (?, ?)');
+        foreach ($addingRoles as $role) {
+            $insertRole->execute([$targetUserId, $role]);
+        }
+        if (in_array('admin', $newRoles, true)) {
+            $adminInsert = $connection->prepare('INSERT IGNORE INTO Administradores (UserId) VALUES (?)');
+            $adminInsert->execute([$targetUserId]);
+        }
+        $connection->commit();
+        flash('success', 'Los roles del usuario fueron actualizados y verificados.');
+    } catch (DomainException $exception) {
+        if (isset($connection) && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        flash('error', $exception->getMessage());
+    } catch (PDOException $exception) {
+        if (isset($connection) && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        flash('error', $exception->getCode() === '23000'
+            ? 'No fue posible aplicar esos roles porque falta un registro requerido o existe una relación duplicada.'
+            : 'No fue posible actualizar los roles. Intenta de nuevo.');
     }
     redirect('panelAdmin.php?modal=usuarios');
 }
@@ -87,12 +210,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'b
         flash('error', 'No puedes darte de baja a ti mismo.');
     } else {
         try {
+            $rolesQuery = database()->prepare('SELECT COUNT(*) FROM Usuario_Roles WHERE UserId = ? AND Rol = \'admin\'');
+            $rolesQuery->execute([$usuarioId]);
+            $deletingAdmin = (int) $rolesQuery->fetchColumn() > 0;
+            $adminCount = (int) database()->query("SELECT COUNT(*) FROM Usuario_Roles WHERE Rol = 'admin'")->fetchColumn();
+            if ($deletingAdmin && $adminCount <= 1) {
+                throw new DomainException('No se puede eliminar al último administrador.');
+            }
             $query = database()->prepare('DELETE FROM Usuarios WHERE UserId = ?');
             $query->execute([$usuarioId]);
             flash($query->rowCount() > 0 ? 'success' : 'error',
                 $query->rowCount() > 0
                     ? 'El usuario fue eliminado correctamente.'
                     : 'El usuario que intentas eliminar no existe.');
+        } catch (DomainException $exception) {
+            flash('error', $exception->getMessage());
         } catch (PDOException $exception) {
             flash('error', $exception->getCode() === '23000'
                 ? 'No se puede eliminar: el usuario tiene actividades registradas en el calendario.'
@@ -104,22 +236,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'b
 
 $usuarios = [];
 $departamentos = [];
+$docentesCatalogo = [];
 try {
-    $query = database()->query("SELECT u.UserId AS id, u.Nombre AS nombre, u.Email AS correo, e.NumeroBoleta AS noBoleta, em.NumeroEmpleado AS numero_empleado, GROUP_CONCAT(ur.Rol ORDER BY ur.Rol SEPARATOR ', ') AS roles FROM Usuarios u LEFT JOIN Estudiante e ON e.UserId = u.UserId LEFT JOIN Empleado em ON em.UserId = u.UserId LEFT JOIN Usuario_Roles ur ON ur.UserId = u.UserId GROUP BY u.UserId, u.Nombre, u.Email, e.NumeroBoleta, em.NumeroEmpleado ORDER BY u.UserId");
+    $query = database()->query("SELECT u.UserId AS id, u.Nombre AS nombre, u.Email AS correo, e.NumeroBoleta AS noBoleta, em.NumeroEmpleado AS numero_empleado, GROUP_CONCAT(ur.Rol ORDER BY ur.Rol SEPARATOR ', ') AS roles, MAX(a.UserId IS NOT NULL) AS administrador_registrado FROM Usuarios u LEFT JOIN Estudiante e ON e.UserId = u.UserId LEFT JOIN Empleado em ON em.UserId = u.UserId LEFT JOIN Usuario_Roles ur ON ur.UserId = u.UserId LEFT JOIN Administradores a ON a.UserId = u.UserId GROUP BY u.UserId, u.Nombre, u.Email, e.NumeroBoleta, em.NumeroEmpleado ORDER BY u.UserId");
     $usuarios = $query->fetchAll();
     $departamentos = database()->query('SELECT DeptId, Nombre FROM Academia_Departamento ORDER BY Nombre')->fetchAll();
+    $docentesCatalogo = database()->query('SELECT DocenteId, NombreCompleto FROM DocentesCatalogo WHERE UserId IS NULL ORDER BY NombreCompleto')->fetchAll();
 } catch (PDOException $exception) {
-    flash('error', 'No fue posible consultar usuarios o departamentos.');
+    flash('error', 'No fue posible consultar usuarios, departamentos o docentes disponibles.');
 }
-
-$rolLabels = [
-    'estudiante' => 'Estudiante',
-    'director' => 'Director',
-    'miembroCatt' => 'Miembro CATT',
-    'jefeAcademia' => 'Jefe de academia',
-    'sinodal' => 'Sinodal',
-    'admin' => 'Administrador',
-];
 
 $conteoRoles = ['estudiante' => 0, 'director' => 0, 'sinodal' => 0, 'miembroCatt' => 0, 'jefeAcademia' => 0, 'admin' => 0];
 foreach ($usuarios as $index => $usuario) {
@@ -248,7 +373,21 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true
                             <td><?= e($usuario['nombre']) ?></td>
                             <td><?= e($usuario['correo']) ?></td>
                             <td><?= e($usuario['noBoleta'] ?: $usuario['numero_empleado']) ?></td>
-                            <td><?= e($usuario['roles_label']) ?></td>
+                            <td>
+                                <?= e($usuario['roles_label']) ?>
+                                <?php if (in_array('admin', array_map('trim', explode(',', $usuario['roles'] ?? '')), true) && !(bool) $usuario['administrador_registrado']): ?><strong class="role-warning">Falta extensión Administradores</strong><?php endif; ?>
+                                <details class="role-editor"><summary>Revisar / cambiar roles</summary>
+                                    <form method="post" class="role-editor-form">
+                                        <input type="hidden" name="formulario" value="actualizar_roles">
+                                        <input type="hidden" name="usuario_id" value="<?= (int) $usuario['id'] ?>">
+                                        <?php $userRoleValues = array_filter(array_map('trim', explode(',', $usuario['roles'] ?? ''))); ?>
+                                        <?php foreach ($rolLabels as $roleValue => $roleLabel): ?>
+                                            <label><input type="checkbox" name="roles_actualizados[]" value="<?= e($roleValue) ?>"<?= in_array($roleValue, $userRoleValues, true) ? ' checked' : '' ?>> <?= e($roleLabel) ?></label>
+                                        <?php endforeach; ?>
+                                        <button class="button button-dark" type="submit">Guardar roles</button>
+                                    </form>
+                                </details>
+                            </td>
                             <td>
                                 <?php if ((int) $usuario['id'] !== (int) $user['id']): ?>
                                     <form method="post" class="admin-inline-form" onsubmit="return confirm('¿Eliminar a <?= e($usuario['nombre']) ?>? Esta acción no se puede deshacer.');">
@@ -294,6 +433,9 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true
                 <label for="departamento_id">Departamento (personal)</label>
                 <select id="departamento_id" name="departamento_id"><option value="">Selecciona departamento</option><?php foreach ($departamentos as $departamento): ?><option value="<?= e((string) $departamento['DeptId']) ?>"<?= (int) ($_POST['departamento_id'] ?? 0) === (int) $departamento['DeptId'] ? ' selected' : '' ?>><?= e($departamento['Nombre']) ?></option><?php endforeach; ?></select>
 
+                <label for="docente_catalogo_id">Vincular con docente del catálogo <span>(opcional)</span></label>
+                <select id="docente_catalogo_id" name="docente_catalogo_id"><option value="0">No vincular a un docente importado</option><?php foreach ($docentesCatalogo as $docenteCatalogo): ?><option value="<?= e((string) $docenteCatalogo['DocenteId']) ?>"<?= (int) ($_POST['docente_catalogo_id'] ?? 0) === (int) $docenteCatalogo['DocenteId'] ? ' selected' : '' ?>><?= e($docenteCatalogo['NombreCompleto']) ?></option><?php endforeach; ?></select>
+
                 <fieldset class="admin-role-options">
                     <legend>Roles</legend>
                     <?php foreach ($rolLabels as $roleValue => $roleLabel): ?>
@@ -323,6 +465,12 @@ $modalPermitido = in_array($modal, ['perfil', 'usuarios', 'nuevo_usuario'], true
 .admin-delete { background: transparent; border: 1px solid #c0392b; border-radius: 999px; color: #c0392b; cursor: pointer; font: inherit; font-size: .72rem; font-weight: 700; padding: 4px 12px; }
 .admin-delete:hover { background: #c0392b; color: #fff; }
 .admin-self { color: var(--muted); font-size: .72rem; font-style: normal; }
+.role-warning { display: block; color: #9c2f21; font-size: .72rem; margin-top: 5px; }
+.role-editor { margin-top: 6px; min-width: 180px; }
+.role-editor summary { color: var(--muted); cursor: pointer; font-size: .72rem; }
+.role-editor-form { display: grid; gap: 5px; padding: 8px; }
+.role-editor-form label { font-size: .76rem; }
+.role-editor-form .button { margin-top: 4px; padding: 7px 10px; }
 .admin-add-top { font-size: .82rem; margin: 0; padding: 8px 14px; position: absolute; right: 52px; top: 18px; }
 </style>
 <script>

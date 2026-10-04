@@ -11,18 +11,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'p
     $fecha = trim($_POST['fecha_presentacion'] ?? '');
     $tipoTT = $_POST['tipo_tt'] ?? '';
     $alumnoId = (int) ($_POST['alumno_id'] ?? 0);
-    $directorId = (int) ($_POST['director_id'] ?? 0);
+    $directoresRaw = $_POST['directores'] ?? [];
     $sinodalesRaw = $_POST['sinodales'] ?? [];
+    $directorIds = is_array($directoresRaw)
+        ? array_values(array_unique(array_filter(array_map('intval', $directoresRaw), static fn (int $id): bool => $id > 0)))
+        : [];
     $sinodalIds = is_array($sinodalesRaw)
         ? array_values(array_unique(array_filter(array_map('intval', $sinodalesRaw), static fn (int $id): bool => $id > 0)))
         : [];
+    $tituloEquipo = trim($_POST['titulo_equipo'] ?? '');
+    $descripcionEquipo = trim($_POST['descripcion_equipo'] ?? '');
 
     $fechaValida = preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) === 1
         && checkdate((int) substr($fecha, 5, 2), (int) substr($fecha, 8, 2), (int) substr($fecha, 0, 4));
-    if (!$fechaValida || !in_array($tipoTT, ['TT1', 'TT2'], true) || $alumnoId < 1 || $directorId < 1 || !$sinodalIds) {
-        $error = 'Completa una fecha válida, el tipo de TT, el alumno, el director y al menos un sinodal.';
+    if (!$fechaValida || !in_array($tipoTT, ['TT1', 'TT2'], true) || $alumnoId < 1 || count($directorIds) !== 2 || count($sinodalIds) !== 3) {
+        $error = 'Selecciona una fecha, el tipo de TT, un alumno, exactamente dos directores y exactamente tres sinodales.';
     } else {
-        $selectedIds = array_values(array_unique(array_merge([$alumnoId, $directorId], $sinodalIds)));
+        $selectedIds = array_values(array_unique(array_merge([$alumnoId], $directorIds, $sinodalIds)));
         $placeholders = implode(', ', array_fill(0, count($selectedIds), '?'));
         $usersQuery = database()->prepare("SELECT UserId AS id, Nombre AS nombre, ApellidoPaterno AS apellido_paterno, ApellidoMaterno AS apellido_materno FROM Usuarios WHERE UserId IN ({$placeholders})");
         $usersQuery->execute($selectedIds);
@@ -40,31 +45,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'p
         $cattQuery = database()->query("SELECT UserId, Rol FROM Usuario_Roles WHERE Rol IN ('miembroCatt', 'jefeAcademia')");
         $cattParticipants = $cattQuery->fetchAll();
         $rolesValidos = count($usersById) === count($selectedIds)
-            && in_array('estudiante', $rolesByUser[$alumnoId] ?? [], true)
-            && in_array('director', $rolesByUser[$directorId] ?? [], true);
+            && in_array('estudiante', $rolesByUser[$alumnoId] ?? [], true);
+        foreach ($directorIds as $directorId) {
+            $rolesValidos = $rolesValidos && in_array('director', $rolesByUser[$directorId] ?? [], true);
+        }
         foreach ($sinodalIds as $sinodalId) {
             $rolesValidos = $rolesValidos && in_array('sinodal', $rolesByUser[$sinodalId] ?? [], true);
         }
+        $teamQuery = database()->prepare('SELECT EquipoId FROM Estudiante WHERE UserId = ?');
+        $teamQuery->execute([$alumnoId]);
+        $equipoId = (int) ($teamQuery->fetchColumn() ?: 0);
 
         if (!$rolesValidos) {
             $error = 'El alumno, director y sinodales seleccionados no tienen los roles esperados.';
         } elseif (!$cattParticipants) {
             $error = 'Registra al menos un miembro CATT o jefe de academia antes de programar presentaciones.';
+        } elseif ($equipoId === 0 && ($tituloEquipo === '' || $descripcionEquipo === '')) {
+            $error = 'Captura título y descripción para crear el equipo de Trabajo Terminal del alumno.';
         } else {
             $alumno = fullName($usersById[$alumnoId]);
-            $director = fullName($usersById[$directorId]);
+            $directores = array_map(static fn (int $id): string => fullName($usersById[$id]), $directorIds);
             $sinodales = array_map(static fn (int $id): string => fullName($usersById[$id]), $sinodalIds);
-            $actividad = "Presentación de {$tipoTT}";
-            $descripcion = 'Alumno: ' . $alumno . ' | Director: ' . $director . ' | Sinodales: ' . implode(', ', $sinodales);
+            $actividad = "Presentación de {$tipoTT} - {$alumno}";
+            $descripcion = 'Alumno: ' . $alumno . ' | Directores: ' . implode(', ', $directores) . ' | Sinodales: ' . implode(', ', $sinodales);
             $connection = database();
             try {
                 $connection->beginTransaction();
+                if ($equipoId === 0) {
+                    $teamInsert = $connection->prepare('INSERT INTO Equipo_TT (TituloProtocolo, Descripcion) VALUES (?, ?)');
+                    $teamInsert->execute([$tituloEquipo, $descripcionEquipo]);
+                    $equipoId = (int) $connection->lastInsertId();
+                    $studentTeamUpdate = $connection->prepare('UPDATE Estudiante SET EquipoId = ? WHERE UserId = ? AND EquipoId IS NULL');
+                    $studentTeamUpdate->execute([$equipoId, $alumnoId]);
+                }
+                $teamAssignment = $connection->prepare('INSERT IGNORE INTO EmpleadoEquipo (UserId, EquipoId) VALUES (?, ?)');
+                foreach (array_values(array_unique(array_merge($directorIds, $sinodalIds))) as $teacherId) {
+                    $teamAssignment->execute([$teacherId, $equipoId]);
+                }
                 $eventQuery = $connection->prepare('INSERT INTO calendario (fecha, actividad, descripcion, tipo_tt, creado_por_user_id) VALUES (?, ?, ?, ?, ?)');
                 $eventQuery->execute([$fecha, $actividad, $descripcion, $tipoTT, $user['id']]);
                 $calendarId = (int) $connection->lastInsertId();
                 $participantQuery = $connection->prepare('INSERT INTO calendario_participante (calendario_id, UserId, Rol) VALUES (?, ?, ?)');
                 $participantQuery->execute([$calendarId, $alumnoId, 'estudiante']);
-                $participantQuery->execute([$calendarId, $directorId, 'director']);
+                foreach ($directorIds as $directorId) {
+                    $participantQuery->execute([$calendarId, $directorId, 'director']);
+                }
                 foreach ($sinodalIds as $sinodalId) {
                     $participantQuery->execute([$calendarId, $sinodalId, 'sinodal']);
                 }
@@ -72,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'p
                     $participantQuery->execute([$calendarId, (int) $cattParticipant['UserId'], $cattParticipant['Rol']]);
                 }
                 $connection->commit();
-                flash('success', "La fecha de {$tipoTT} fue asignada al estudiante, director, sinodales, CATT y jefes de academia.");
+                flash('success', "La presentación de {$tipoTT} fue asignada con dos directores y tres sinodales; el equipo quedó vinculado a sus docentes.");
                 redirect('calendario.php');
             } catch (Throwable $exception) {
                 if ($connection->inTransaction()) {
@@ -165,7 +190,25 @@ require __DIR__ . '/../app/views/header.php';
 <?php endforeach; endif; ?>
 </div>
 <?php if ($canAssignPresentations): ?>
-<section class="new-activity"><div><p class="eyebrow">Asignación CATT</p><h2>Programar presentación TT</h2><p>La fecha se compartirá con estudiante, director, sinodales, CATT y jefes de academia.</p></div><form method="post" class="activity-form"><input type="hidden" name="formulario" value="presentacion"><label for="tipo_tt">Trabajo terminal</label><select id="tipo_tt" name="tipo_tt" required><option value="">Selecciona TT1 o TT2</option><option value="TT1">TT1</option><option value="TT2">TT2</option></select><label for="fecha_presentacion">Fecha de presentación</label><input id="fecha_presentacion" name="fecha_presentacion" type="date" required><label for="alumno_id">Estudiante</label><select id="alumno_id" name="alumno_id" required><option value="">Selecciona un estudiante</option><?php foreach ($students as $student): ?><option value="<?= e((string) $student['id']) ?>"><?= e(fullName($student)) ?> · <?= e($student['noBoleta']) ?></option><?php endforeach; ?></select><label for="director_id">Director</label><select id="director_id" name="director_id" required><option value="">Selecciona un director</option><?php foreach ($directors as $director): ?><option value="<?= e((string) $director['id']) ?>"><?= e(fullName($director)) ?> · <?= e($director['numero_empleado']) ?></option><?php endforeach; ?></select><fieldset><legend>Sinodales</legend><?php foreach ($sinodals as $sinodal): ?><label><input type="checkbox" name="sinodales[]" value="<?= e((string) $sinodal['id']) ?>"> <?= e(fullName($sinodal)) ?></label><?php endforeach; ?></fieldset><button class="button button-primary" type="submit">Asignar fecha</button></form></section>
+<section class="new-activity">
+    <div><p class="eyebrow">Asignación CATT</p><h2>Programar presentación TT</h2><p>Asigna una fecha, dos directores y tres sinodales al estudiante.</p></div>
+    <form method="post" class="activity-form">
+        <input type="hidden" name="formulario" value="presentacion">
+        <label for="tipo_tt">Trabajo terminal</label>
+        <select id="tipo_tt" name="tipo_tt" required><option value="">Selecciona TT1 o TT2</option><option value="TT1">TT1</option><option value="TT2">TT2</option></select>
+        <label for="fecha_presentacion">Fecha de presentación</label>
+        <input id="fecha_presentacion" name="fecha_presentacion" type="date" required>
+        <label for="alumno_id">Estudiante</label>
+        <select id="alumno_id" name="alumno_id" required><option value="">Selecciona un estudiante</option><?php foreach ($students as $student): ?><option value="<?= e((string) $student['id']) ?>"><?= e(fullName($student)) ?> · <?= e($student['noBoleta']) ?></option><?php endforeach; ?></select>
+        <label for="titulo_equipo">Título del equipo / protocolo</label>
+        <input id="titulo_equipo" name="titulo_equipo" maxlength="100" placeholder="Título del Trabajo Terminal">
+        <label for="descripcion_equipo">Descripción del equipo</label>
+        <textarea id="descripcion_equipo" name="descripcion_equipo" rows="3" placeholder="Descripción del proyecto"></textarea>
+        <fieldset class="presentation-people"><legend>Dos directores</legend><?php foreach ($directors as $director): ?><label><input type="checkbox" name="directores[]" value="<?= e((string) $director['id']) ?>"> <?= e(fullName($director)) ?> · <?= e($director['numero_empleado']) ?></label><?php endforeach; ?></fieldset>
+        <fieldset class="presentation-people"><legend>Tres sinodales</legend><?php foreach ($sinodals as $sinodal): ?><label><input type="checkbox" name="sinodales[]" value="<?= e((string) $sinodal['id']) ?>"> <?= e(fullName($sinodal)) ?> · <?= e($sinodal['numero_empleado']) ?></label><?php endforeach; ?></fieldset>
+        <button class="button button-primary" type="submit">Asignar presentación</button>
+    </form>
+</section>
 <?php endif; ?>
 <?php if ($canManage): ?>
 <section id="nueva-actividad" class="new-activity"><div><p class="eyebrow">Gestión</p><h2>Agregar una actividad</h2><p>Completa los datos para compartirla con la comunidad.</p></div><form method="post" class="activity-form"><input type="hidden" name="formulario" value="actividad"><label for="fecha">Fecha de inicio</label><input id="fecha" name="fecha" type="date" required><label for="fecha_fin">Fecha final <span>(opcional)</span></label><input id="fecha_fin" name="fecha_fin" type="date"><label for="actividad">Actividad</label><input id="actividad" name="actividad" required placeholder="Nombre de la actividad"><label for="descripcion">Descripción <span>(opcional)</span></label><textarea id="descripcion" name="descripcion" rows="3"></textarea><button class="button button-primary" type="submit">Publicar actividad</button></form></section>
