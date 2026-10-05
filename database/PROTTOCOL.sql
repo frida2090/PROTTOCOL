@@ -34,6 +34,24 @@ CREATE TABLE Usuario_Roles (
         ON DELETE CASCADE
     ) ENGINE=InnoDB;
 
+-- Cuenta de administrador de ejemplo para la primera instalación
+INSERT INTO Usuarios (Nombre, ApellidoPaterno, ApellidoMaterno, Email, PasswordHash)
+VALUES (
+    'Administrador',
+    'PROTTOCOL',
+    '',
+    'admin@prottocol.com.mx',
+    '$2y$10$RbWbWNuNjSjYw578WlVjxuDxc0g.NNfmzEmTzM1Fuk9wU2quCaA2y'
+);
+
+SET @admin_user_id = LAST_INSERT_ID();
+
+INSERT INTO Usuario_Roles (UserId, Rol)
+VALUES (@admin_user_id, 'admin');
+
+INSERT INTO Administradores (UserId)
+VALUES (@admin_user_id);
+
 -- Estructura de una Academia
 CREATE TABLE Academia (
     AcadId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -101,8 +119,32 @@ CREATE TABLE Equipo_TT(
     EquipoId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     TituloProtocolo VARCHAR(100) NOT NULL,
     Descripcion TEXT NOT NULL,
+    RepresentanteUserId INT UNSIGNED NULL UNIQUE, -- Primer integrante en orden alfabético
     FechaCreacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Directores, sinodales y profesor de seguimiento de cada equipo (un rol por docente y equipo)
+CREATE TABLE Equipo_Asignacion (
+    EquipoId INT UNSIGNED NOT NULL,
+    UserId INT UNSIGNED NOT NULL,
+    Rol ENUM('director', 'sinodal', 'seguimiento') NOT NULL,
+    AsignadoPorUserId INT UNSIGNED NULL,
+    FechaAsignacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (EquipoId, UserId),
+    INDEX idx_equipo_asignacion_usuario (UserId, EquipoId),
+    CONSTRAINT fk_equipo_asignacion_equipo
+        FOREIGN KEY (EquipoId) REFERENCES Equipo_TT(EquipoId)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_equipo_asignacion_usuario
+        FOREIGN KEY (UserId) REFERENCES Usuarios(UserId)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_equipo_asignacion_asignador
+        FOREIGN KEY (AsignadoPorUserId) REFERENCES Usuarios(UserId)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL
+) ENGINE=InnoDB;
 
 CREATE TABLE TT(
     TT_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -145,6 +187,12 @@ CREATE TABLE Estudiante(
         ON UPDATE CASCADE
         ON DELETE RESTRICT -- Impide borrar un equipo por error si ya existen estudiantes asociados
 );
+
+ALTER TABLE Equipo_TT
+    ADD CONSTRAINT fk_equipo_representante
+        FOREIGN KEY (RepresentanteUserId) REFERENCES Estudiante(UserId)
+        ON UPDATE CASCADE
+        ON DELETE SET NULL;
 
 -- Permite que un empleado pueda pertenecer a varios equipos de TT
 CREATE TABLE EmpleadoEquipo(
@@ -323,6 +371,5 @@ FROM (
   UNION ALL SELECT '2027-02-15', NULL, 'Entrega de dictámenes reestructurados (TTR)', NULL
 ) datos
 JOIN Usuarios u ON u.Email = 'profesor@catt.local';
-
 
 

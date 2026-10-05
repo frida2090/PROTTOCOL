@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/views/dashboard/sidebar.php';
+require_once __DIR__ . '/../app/equipos.php';
 
 $user = currentUser();
 if(!$user){
@@ -32,6 +33,7 @@ $modalPermitido = in_array($modal, ['perfil', 'tramites', 'formatos'], true);
 $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion FROM calendario c WHERE COALESCE(c.fecha_fin, c.fecha) >= CURRENT_DATE AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?)) ORDER BY c.fecha ASC LIMIT 3");
 $query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
+$miEquipo = equipoDelEstudiante(database(), (int) $user['id']);
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -67,6 +69,15 @@ $proximasFechas = $query->fetchAll();
                 <h2>Trabajo Terminal II</h2>
                 <p class="card-copy">Continúa con el proceso de tu Trabajo Terminal II, una vez que hayas aprobado TTI</p>
             </article>
+        </section>
+
+        <section class="dashboard-panel">
+            <div class="panel-header"><h2>Mi equipo de TT</h2></div>
+            <div class="activity-summary">
+                <?php if (!$miEquipo): ?>
+                    <p>Aún no tienes un equipo asignado. La CATT te asignará uno junto con tus directores y sinodales.</p>
+                <?php else: renderEquipoDetalle($miEquipo); endif; ?>
+            </div>
         </section>
 
         <section class="dashboard-panel">

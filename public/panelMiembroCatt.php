@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/views/dashboard/sidebar.php';
+require_once __DIR__ . '/../app/equipos.php';
 
 $user = currentUser();
 if(!$user){
@@ -35,10 +36,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'd
     redirect('panelMiembroCatt.php?modal=formatos');
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'equipo') {
+    try {
+        crearEquipoTT(
+            database(),
+            (int) $user['id'],
+            trim($_POST['titulo_equipo'] ?? ''),
+            trim($_POST['descripcion_equipo'] ?? ''),
+            enteros($_POST['estudiantes'] ?? []),
+            enteros($_POST['directores'] ?? []),
+            enteros($_POST['sinodales'] ?? []),
+            (int) ($_POST['seguimiento'] ?? 0)
+        );
+        flash('success', 'El equipo de TT fue registrado y sus directores, sinodales y profesor de seguimiento quedaron asignados.');
+    } catch (DomainException $exception) {
+        flash('error', $exception->getMessage());
+    } catch (Throwable $exception) {
+        flash('error', 'No fue posible registrar el equipo. Intenta de nuevo.');
+    }
+    redirect('panelMiembroCatt.php?modal=equipos');
+}
+
 $pageTitle = 'Panel del Miembro · CATT';
 require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
-$modalPermitido = in_array($modal, ['perfil', 'revisiones', 'formatos'], true);
+$modalPermitido = in_array($modal, ['perfil', 'revisiones', 'formatos', 'equipos'], true);
+
+$estudiantesLibres = $directoresDisponibles = $sinodalesDisponibles = $docentesDisponibles = $equiposRegistrados = [];
+if ($modal === 'equipos') {
+    $db = database();
+    $porRol = static function (string $rol) use ($db): array {
+        $query = $db->prepare('SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId WHERE ur.Rol = ? ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre');
+        $query->execute([$rol]);
+        return $query->fetchAll();
+    };
+    $estudiantesLibres = $db->query("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'estudiante' JOIN Estudiante e ON e.UserId = u.UserId WHERE e.EquipoId IS NULL ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
+    $directoresDisponibles = $porRol('director');
+    $sinodalesDisponibles = $porRol('sinodal');
+    $docentesDisponibles = $db->query("SELECT DISTINCT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol IN ('director', 'sinodal') ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
+    $equiposRegistrados = array_map(
+        static fn (array $equipo): array => equipoCompleto($db, $equipo),
+        $db->query('SELECT EquipoId, TituloProtocolo, Descripcion, RepresentanteUserId FROM Equipo_TT ORDER BY EquipoId DESC')->fetchAll()
+    );
+}
 
 $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion FROM calendario c WHERE COALESCE(c.fecha_fin, c.fecha) >= CURRENT_DATE AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?)) ORDER BY c.fecha ASC LIMIT 3");
 $query->execute([$user['id']]);
@@ -137,6 +177,49 @@ $proximasFechas = $query->fetchAll();
                 <h3>No tienes revisiones pendientes</h3>
                 <p>Ningun alumno ha enviado formatos para revisar.</p>
                 <a class="button button-primary" href="panelMiembroCatt.php?modal=formatos">Registrar un dictamen</a>
+            </div>
+        </section>
+    <?php elseif ($modal === 'equipos'): ?>
+        <?php
+        $opciones = static function (array $usuarios): void {
+            foreach ($usuarios as $usuario) {
+                echo '<option value="' . e((string) $usuario['UserId']) . '">' . e(nombreDeUsuario($usuario)) . '</option>';
+            }
+        };
+        ?>
+        <section class="dashboard-modal-content" aria-labelledby="modal-equipos-title">
+            <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
+            <p class="eyebrow">Equipos de TT</p><h2 id="modal-equipos-title">Asignar equipo de TT</h2>
+            <p class="modal-intro">El representante será el primer estudiante en orden alfabético. Cada docente puede tener máximo <?= MAX_EQUIPOS_POR_DOCENTE ?> equipos. Usa Ctrl para elegir varias opciones.</p>
+            <form method="post" class="modal-form">
+                <input type="hidden" name="formulario" value="equipo">
+
+                <label for="titulo_equipo">Título del protocolo</label>
+                <input type="text" id="titulo_equipo" name="titulo_equipo" maxlength="100" required>
+
+                <label for="descripcion_equipo">Descripción</label>
+                <textarea id="descripcion_equipo" name="descripcion_equipo" rows="3" required></textarea>
+
+                <label for="estudiantes">Estudiantes del equipo (sin equipo asignado)</label>
+                <select id="estudiantes" name="estudiantes[]" multiple size="4" required><?php $opciones($estudiantesLibres); ?></select>
+
+                <label for="directores">Directores (2)</label>
+                <select id="directores" name="directores[]" multiple size="3" required><?php $opciones($directoresDisponibles); ?></select>
+
+                <label for="sinodales">Sinodales (3)</label>
+                <select id="sinodales" name="sinodales[]" multiple size="4" required><?php $opciones($sinodalesDisponibles); ?></select>
+
+                <label for="seguimiento">Profesor de seguimiento</label>
+                <select id="seguimiento" name="seguimiento" required><option value="">Selecciona una opción</option><?php $opciones($docentesDisponibles); ?></select>
+
+                <button class="button button-primary" type="submit">Registrar equipo <span>→</span></button>
+            </form>
+
+            <h3>Equipos registrados (<?= count($equiposRegistrados) ?>)</h3>
+            <div class="activity-summary">
+                <?php if (!$equiposRegistrados): ?>
+                    <p>Aún no hay equipos registrados.</p>
+                <?php else: foreach ($equiposRegistrados as $equipo): renderEquipoDetalle($equipo); endforeach; endif; ?>
             </div>
         </section>
     <?php elseif ($modal === 'formatos'): ?>

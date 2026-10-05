@@ -24,6 +24,7 @@ function roleMenuItems(string $role): array
             'inicio' => ['label' => 'Inicio', 'url' => 'panelMiembroCatt.php'],
             'perfil' => ['label' => 'Datos personales', 'url' => 'panelMiembroCatt.php?modal=perfil'],
             'revisiones' => ['label' => 'Revisiones asignadas', 'url' => 'panelMiembroCatt.php?modal=revisiones'],
+            'equipos' => ['label' => 'Asignar equipos TT', 'url' => 'panelMiembroCatt.php?modal=equipos'],
             'calendario' => ['label' => 'Calendario', 'url' => 'calendario.php'],
             'actividad' => ['label' => 'Nueva Actividad', 'url' => 'calendario.php#nueva-actividad']
         ],

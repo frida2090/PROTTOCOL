@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/views/dashboard/sidebar.php';
+require_once __DIR__ . '/../app/equipos.php';
 
 $user = currentUser();
 if(!$user){
@@ -45,9 +46,7 @@ $modalPermitido = in_array($modal, ['perfil', 'revisiones', 'dictamen'], true);
 $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion FROM calendario c WHERE COALESCE(c.fecha_fin, c.fecha) >= CURRENT_DATE AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?)) ORDER BY c.fecha ASC LIMIT 3");
 $query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
-$teamsQuery = database()->prepare("SELECT et.EquipoId, et.TituloProtocolo, et.Descripcion, GROUP_CONCAT(DISTINCT CONCAT_WS(' ', student.Nombre, student.ApellidoPaterno, student.ApellidoMaterno) ORDER BY student.ApellidoPaterno, student.Nombre SEPARATOR ', ') AS estudiantes, GROUP_CONCAT(DISTINCT ur.Rol ORDER BY ur.Rol SEPARATOR ', ') AS roles FROM EmpleadoEquipo ee JOIN Equipo_TT et ON et.EquipoId = ee.EquipoId JOIN Usuario_Roles own_role ON own_role.UserId = ee.UserId AND own_role.Rol IN ('director', 'sinodal') LEFT JOIN Estudiante e ON e.EquipoId = et.EquipoId LEFT JOIN Usuarios student ON student.UserId = e.UserId WHERE ee.UserId = ? GROUP BY et.EquipoId, et.TituloProtocolo, et.Descripcion ORDER BY et.TituloProtocolo");
-$teamsQuery->execute([$user['id']]);
-$assignedTeams = $teamsQuery->fetchAll();
+$assignedTeams = equiposDelDocente(database(), (int) $user['id']);
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -97,21 +96,11 @@ $assignedTeams = $teamsQuery->fetchAll();
         </section>
 
         <section class="dashboard-panel">
-            <div class="panel-header"><h2>Equipos de Trabajo Terminal asignados</h2><span><?= count($assignedTeams) ?></span></div>
+            <div class="panel-header"><h2>Equipos de Trabajo Terminal asignados</h2><span><?= count($assignedTeams) ?> de <?= MAX_EQUIPOS_POR_DOCENTE ?></span></div>
             <div class="activity-summary">
                 <?php if (!$assignedTeams): ?>
-                    <p>Aún no tienes equipos asignados como director o sinodal.</p>
-                <?php else: foreach ($assignedTeams as $team): ?>
-                    <article class="summary-item">
-                        <span class="summary-date">TT</span>
-                        <div>
-                            <strong><?= e($team['TituloProtocolo']) ?></strong>
-                            <small>Rol: <?= e(str_replace(',', ', ', $team['roles'])) ?></small>
-                            <small>Estudiantes: <?= e($team['estudiantes'] ?: 'Sin estudiantes vinculados') ?></small>
-                            <small><?= e($team['Descripcion']) ?></small>
-                        </div>
-                    </article>
-                <?php endforeach; endif; ?>
+                    <p>Aún no tienes equipos asignados.</p>
+                <?php else: foreach ($assignedTeams as $team): renderEquipoDetalle($team, true); endforeach; endif; ?>
             </div>
         </section>
 
