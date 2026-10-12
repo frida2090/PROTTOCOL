@@ -177,7 +177,7 @@ function etiquetaRolEquipo(?string $rol): string
     return implode(', ', $etiquetas);
 }
 
-function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false): void
+function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false, ?array $protocolo = null): void
 {
     ?>
     <article class="summary-item">
@@ -192,6 +192,13 @@ function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false): void
             <?php foreach ($equipo['docentes'] as $docente): ?>
                 <small><?= e(etiquetaRolEquipo($docente['Rol'])) ?>: <?= e(nombreDeUsuario($docente)) ?></small>
             <?php endforeach; ?>
+            <?php if ($protocolo !== null): ?>
+                <div class="protocol-status-line">
+                    <span class="status-chip status-chip--<?= e(claseEstadoProtocolo((string) $protocolo['Status'])) ?>"><?= e(etiquetaEstadoProtocolo((string) $protocolo['Status'])) ?></span>
+                    <?php if (!empty($protocolo['FechaSubida'])): ?><small>Protocolo enviado el <?= e(date('d/m/Y', strtotime((string) $protocolo['FechaSubida']))) ?></small><?php endif; ?>
+                    <a class="protocol-doc-link" href="descargarFormato.php?id=<?= (int) $protocolo['FormatoId'] ?>">Ver PDF</a>
+                </div>
+            <?php endif; ?>
         </div>
     </article>
     <?php
