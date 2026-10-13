@@ -32,7 +32,7 @@ CREATE TABLE Usuario_Roles (
         FOREIGN KEY (UserId) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
         ON DELETE CASCADE
-    ) ENGINE=InnoDB;
+    );
 
 -- Cuenta de administrador de ejemplo para la primera instalación
 INSERT INTO Usuarios (Nombre, ApellidoPaterno, ApellidoMaterno, Email, PasswordHash)
@@ -92,12 +92,12 @@ CREATE TABLE DocentesCatalogo (
         FOREIGN KEY (UserId) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
         ON DELETE SET NULL
-) ENGINE=InnoDB;
+);
 
 CREATE TABLE UnidadAprendizaje (
     UnidadId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    Nombre VARCHAR(255) NOT NULL UNIQUE
-) ENGINE=InnoDB;
+    Nombre VARCHAR(200) NOT NULL UNIQUE
+);
 
 CREATE TABLE Docente_UnidadAprendizaje (
     DocenteId INT UNSIGNED NOT NULL,
@@ -112,7 +112,7 @@ CREATE TABLE Docente_UnidadAprendizaje (
         FOREIGN KEY (UnidadId) REFERENCES UnidadAprendizaje(UnidadId)
         ON UPDATE CASCADE
         ON DELETE CASCADE
-) ENGINE=InnoDB;
+);
 
 -- Se trabaja con la tabla equipo durante el periodo del proceso de Protocolo
 CREATE TABLE Equipo_TT(
@@ -144,7 +144,7 @@ CREATE TABLE Equipo_Asignacion (
         FOREIGN KEY (AsignadoPorUserId) REFERENCES Usuarios(UserId)
         ON UPDATE CASCADE
         ON DELETE SET NULL
-) ENGINE=InnoDB;
+);
 
 CREATE TABLE TT(
     TT_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -312,7 +312,7 @@ CREATE TABLE calendario (
         ON DELETE RESTRICT,
     CONSTRAINT chk_calendario_rango
         CHECK (fecha_fin IS NULL OR fecha_fin >= fecha)
-) ENGINE=InnoDB;
+);
 
 CREATE TABLE calendario_participante (
     calendario_id INT UNSIGNED NOT NULL,
@@ -330,7 +330,7 @@ CREATE TABLE calendario_participante (
         ON DELETE CASCADE,
     CONSTRAINT chk_calendario_participante_rol
         CHECK (Rol <> 'admin')
-) ENGINE=InnoDB;
+);
 
 INSERT INTO calendario (fecha, fecha_fin, actividad, descripcion, creado_por_user_id)
 SELECT datos.fecha, datos.fecha_fin, datos.actividad, datos.descripcion, u.UserId

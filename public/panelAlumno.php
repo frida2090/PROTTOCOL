@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/views/dashboard/sidebar.php';
 require_once __DIR__ . '/../app/equipos.php';
+require_once __DIR__ . '/../app/protocolos.php';
 
 $user = currentUser();
 if(!$user){
@@ -17,11 +18,18 @@ if($user['rol'] !== 'estudiante') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'formato') {
     $tipoFormato = trim($_POST['tipo_formato'] ?? '');
     $formatosPermitidos = ['protocolo', 'trabajo-terminal-i', 'trabajo-terminal-ii', 'reinscripcion'];
-    if (in_array($tipoFormato, $formatosPermitidos, true)) {
-        flash('success', 'Tu solicitud de formato fue registrada. Próximamente podrás continuar el trámite desde este panel.');
-    } else {
+    if (!in_array($tipoFormato, $formatosPermitidos, true)) {
         flash('error', 'Selecciona un tipo de trámite válido.');
+        redirect('panelAlumno.php?modal=formatos');
     }
+    if ($tipoFormato === 'protocolo') {
+        if (!csrfValid()) {
+            flash('error', 'La sesión expiró. Vuelve a abrir el formulario e intenta de nuevo.');
+            redirect('panelAlumno.php?modal=formatos');
+        }
+        redirect('tramiteProtocolo.php');
+    }
+    flash('success', 'Tu solicitud de formato fue registrada. Próximamente podrás continuar el trámite desde este panel.');
     redirect('panelAlumno.php?modal=formatos');
 }
 
@@ -34,6 +42,7 @@ $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descri
 $query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
 $miEquipo = equipoDelEstudiante(database(), (int) $user['id']);
+$miProtocolo = $miEquipo ? protocoloDelEquipo(database(), (int) $miEquipo['EquipoId']) : null;
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -72,11 +81,14 @@ $miEquipo = equipoDelEstudiante(database(), (int) $user['id']);
         </section>
 
         <section class="dashboard-panel">
-            <div class="panel-header"><h2>Mi equipo de TT</h2></div>
+            <div class="panel-header"><h2>Mi equipo de TT</h2><?php if ($miEquipo && !$miProtocolo): ?><a href="tramiteProtocolo.php">Enviar mi protocolo</a><?php endif; ?></div>
             <div class="activity-summary">
                 <?php if (!$miEquipo): ?>
                     <p>Aún no tienes un equipo asignado. La CATT te asignará uno junto con tus directores y sinodales.</p>
-                <?php else: renderEquipoDetalle($miEquipo); endif; ?>
+                    <p><a class="button button-primary" href="tramiteProtocolo.php">Iniciar mi protocolo <span>→</span></a></p>
+                <?php else: ?>
+                    <?php renderEquipoDetalle($miEquipo, false, $miProtocolo); ?>
+                <?php endif; ?>
             </div>
         </section>
 
@@ -121,7 +133,7 @@ $miEquipo = equipoDelEstudiante(database(), (int) $user['id']);
         <section class="dashboard-modal-content" aria-labelledby="modal-formatos-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
             <p class="eyebrow">Nueva solicitud</p><h2 id="modal-formatos-title">Selecciona un trámite</h2><p class="modal-intro">Elige el formato que quieres solicitar para comenzar tu proceso.</p>
-            <form method="post" class="modal-form"><input type="hidden" name="formulario" value="formato"><label for="tipo_formato">Tipo de trámite</label><select id="tipo_formato" name="tipo_formato" required><option value="">Selecciona una opción</option><option value="protocolo">Registro de protocolo</option><option value="trabajo-terminal-i">Trabajo Terminal I</option><option value="trabajo-terminal-ii">Trabajo Terminal II</option><option value="reinscripcion">Reinscripción o seguimiento</option></select><button class="button button-primary" type="submit">Continuar solicitud <span>→</span></button></form>
+            <form method="post" class="modal-form"><input type="hidden" name="formulario" value="formato"><?= csrfField() ?><label for="tipo_formato">Tipo de trámite</label><select id="tipo_formato" name="tipo_formato" required><option value="">Selecciona una opción</option><option value="protocolo">Registro de protocolo</option><option value="trabajo-terminal-i">Trabajo Terminal I</option><option value="trabajo-terminal-ii">Trabajo Terminal II</option><option value="reinscripcion">Reinscripción o seguimiento</option></select><button class="button button-primary" type="submit">Continuar solicitud <span>→</span></button></form>
         </section>
     <?php endif; ?>
 </div>

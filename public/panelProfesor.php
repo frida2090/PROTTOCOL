@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/views/dashboard/sidebar.php';
 require_once __DIR__ . '/../app/equipos.php';
+require_once __DIR__ . '/../app/protocolos.php';
 
 $user = currentUser();
 if(!$user){
@@ -47,6 +48,21 @@ $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descri
 $query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
 $assignedTeams = equiposDelDocente(database(), (int) $user['id']);
+$protocolosPorEquipo = [];
+foreach ($assignedTeams as $team) {
+    $protocolosPorEquipo[(int) $team['EquipoId']] = protocoloDelEquipo(database(), (int) $team['EquipoId']);
+}
+$equiposComoDirector = $equiposComoSinodal = $equiposOtros = [];
+foreach ($assignedTeams as $team) {
+    $miRol = (string) ($team['MiRol'] ?? '');
+    if (str_contains($miRol, 'director')) {
+        $equiposComoDirector[] = $team;
+    } elseif (str_contains($miRol, 'sinodal')) {
+        $equiposComoSinodal[] = $team;
+    } else {
+        $equiposOtros[] = $team;
+    }
+}
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -96,13 +112,31 @@ $assignedTeams = equiposDelDocente(database(), (int) $user['id']);
         </section>
 
         <section class="dashboard-panel">
-            <div class="panel-header"><h2>Equipos de Trabajo Terminal asignados</h2><span><?= count($assignedTeams) ?> de <?= MAX_EQUIPOS_POR_DOCENTE ?></span></div>
+            <div class="panel-header"><h2>Equipos donde soy Director</h2><span><?= count($equiposComoDirector) ?> de <?= MAX_EQUIPOS_POR_DOCENTE ?></span></div>
             <div class="activity-summary">
-                <?php if (!$assignedTeams): ?>
-                    <p>Aún no tienes equipos asignados.</p>
-                <?php else: foreach ($assignedTeams as $team): renderEquipoDetalle($team, true); endforeach; endif; ?>
+                <?php if (!$equiposComoDirector): ?>
+                    <p>Por ahora no diriges ningún equipo de Trabajo Terminal.</p>
+                <?php else: foreach ($equiposComoDirector as $team): renderEquipoDetalle($team, false, $protocolosPorEquipo[(int) $team['EquipoId']] ?? null); endforeach; endif; ?>
             </div>
         </section>
+
+        <section class="dashboard-panel">
+            <div class="panel-header"><h2>Equipos donde soy Sinodal</h2><span><?= count($equiposComoSinodal) ?> equipos</span></div>
+            <div class="activity-summary">
+                <?php if (!$equiposComoSinodal): ?>
+                    <p>Por ahora no tienes equipos asignados como sinodal.</p>
+                <?php else: foreach ($equiposComoSinodal as $team): renderEquipoDetalle($team, false, $protocolosPorEquipo[(int) $team['EquipoId']] ?? null); endforeach; endif; ?>
+            </div>
+        </section>
+
+        <?php if ($equiposOtros): ?>
+        <section class="dashboard-panel">
+            <div class="panel-header"><h2>Otros equipos asignados</h2><span><?= count($equiposOtros) ?></span></div>
+            <div class="activity-summary">
+                <?php foreach ($equiposOtros as $team): renderEquipoDetalle($team, true, $protocolosPorEquipo[(int) $team['EquipoId']] ?? null); endforeach; ?>
+            </div>
+        </section>
+        <?php endif; ?>
 
         <section class="dashboard-panel">
             <div class="panel-header">

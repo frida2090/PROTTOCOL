@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/views/dashboard/sidebar.php';
 require_once __DIR__ . '/../app/equipos.php';
+require_once __DIR__ . '/../app/protocolos.php';
 
 $user = currentUser();
 if(!$user){
@@ -36,11 +37,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'd
     redirect('panelMiembroCatt.php?modal=formatos');
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'equipo') {
-    $quiereJson = str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json');
-    $resultado = ['ok' => false, 'message' => ''];
+// Autorización de protocolos enviados por los alumnos (asigna los 3 sinodales)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'autorizar_protocolo') {
+    $formatoId = (int) ($_POST['formato_id'] ?? 0);
+    $sinodales = enteros($_POST['sinodales'] ?? []);
+
     try {
-        $equipoId = crearEquipoTT(
+        if (!csrfValid()) {
+            throw new DomainException('La sesión expiró. Vuelve a abrir la lista e intenta de nuevo.');
+        }
+        if ($formatoId < 1) {
+            throw new DomainException('Selecciona un protocolo válido.');
+        }
+        if (count($sinodales) !== 3) {
+            throw new DomainException('Selecciona exactamente tres sinodales para autorizar el protocolo.');
+        }
+
+        $connection = database();
+        $connection->beginTransaction();
+
+        $formatoQuery = $connection->prepare('SELECT FormatoId, Status, EquipoId FROM Formatos_Subidos WHERE FormatoId = ? FOR UPDATE');
+        $formatoQuery->execute([$formatoId]);
+        $formato = $formatoQuery->fetch();
+        if (!$formato) {
+            throw new DomainException('El protocolo seleccionado ya no existe.');
+        }
+        if ($formato['Status'] !== 'Pendiente') {
+            throw new DomainException('El protocolo ya fue procesado por la CATT.');
+        }
+        $equipoId = (int) $formato['EquipoId'];
+
+        $marcas = implode(', ', array_fill(0, count($sinodales), '?'));
+        $rolQuery = $connection->prepare("SELECT DISTINCT u.UserId FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'sinodal' WHERE u.UserId IN ({$marcas}) FOR UPDATE");
+        $rolQuery->execute($sinodales);
+        if (count($rolQuery->fetchAll()) !== 3) {
+            throw new DomainException('Algún seleccionado no existe o no tiene el rol de sinodal.');
+        }
+
+        $enEquipoQuery = $connection->prepare("SELECT UserId FROM Equipo_Asignacion WHERE EquipoId = ? AND UserId IN ({$marcas})");
+        $enEquipoQuery->execute(array_merge([$equipoId], $sinodales));
+        if ($enEquipoQuery->fetch()) {
+            throw new DomainException('Algún sinodal seleccionado ya está asignado a este equipo (por ejemplo, es uno de sus directores).');
+        }
+
+        $limitQuery = $connection->prepare("SELECT UserId, COUNT(*) AS total FROM EmpleadoEquipo WHERE UserId IN ({$marcas}) GROUP BY UserId HAVING total >= " . MAX_EQUIPOS_POR_DOCENTE);
+        $limitQuery->execute($sinodales);
+        if ($limitQuery->fetch()) {
+            throw new DomainException('Algún sinodal seleccionado ya alcanzó el máximo de ' . MAX_EQUIPOS_POR_DOCENTE . ' equipos.');
+        }
+
+        $update = $connection->prepare("UPDATE Formatos_Subidos SET Status = 'Aprobado', UserId = ?, FechaRevision = CURRENT_TIMESTAMP WHERE FormatoId = ? AND Status = 'Pendiente'");
+        $update->execute([(int) $user['id'], $formatoId]);
+        if ($update->rowCount() !== 1) {
+            throw new DomainException('El protocolo ya fue procesado por la CATT.');
+        }
+
+        $assign = $connection->prepare('INSERT INTO Equipo_Asignacion (EquipoId, UserId, Rol, AsignadoPorUserId) VALUES (?, ?, ?, ?)');
+        $link = $connection->prepare('INSERT IGNORE INTO EmpleadoEquipo (UserId, EquipoId) VALUES (?, ?)');
+        foreach ($sinodales as $sinodalId) {
+            $assign->execute([$equipoId, $sinodalId, 'sinodal', (int) $user['id']]);
+            $link->execute([$sinodalId, $equipoId]);
+        }
+
+        $connection->commit();
+        flash('success', 'El protocolo fue autorizado y los tres sinodales quedaron asignados al equipo.');
+    } catch (DomainException $exception) {
+        if (isset($connection) && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        flash('error', $exception->getMessage());
+    } catch (Throwable $exception) {
+        if (isset($connection) && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        flash('error', 'No fue posible autorizar el protocolo. Intenta de nuevo.');
+    }
+    redirect('panelMiembroCatt.php?modal=revisiones');
+}
+
+// Rechazo de protocolos: libera al equipo para que el alumno pueda reintentar
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'rechazar_protocolo') {
+    $formatoId = (int) ($_POST['formato_id'] ?? 0);
+
+    try {
+        if (!csrfValid()) {
+            throw new DomainException('La sesión expiró. Vuelve a abrir la lista e intenta de nuevo.');
+        }
+        if ($formatoId < 1) {
+            throw new DomainException('Selecciona un protocolo válido.');
+        }
+
+        $connection = database();
+        $connection->beginTransaction();
+
+        $formatoQuery = $connection->prepare('SELECT FormatoId, Status, EquipoId FROM Formatos_Subidos WHERE FormatoId = ? FOR UPDATE');
+        $formatoQuery->execute([$formatoId]);
+        $formato = $formatoQuery->fetch();
+        if (!$formato) {
+            throw new DomainException('El protocolo seleccionado ya no existe.');
+        }
+        if ($formato['Status'] !== 'Pendiente') {
+            throw new DomainException('El protocolo ya fue procesado por la CATT.');
+        }
+        $equipoId = (int) $formato['EquipoId'];
+
+        // Se eliminan primero las filas hijas para no depender de ON DELETE CASCADE
+        $connection->prepare('DELETE FROM EmpleadoEquipo WHERE EquipoId = ?')->execute([$equipoId]);
+        $connection->prepare('DELETE FROM Equipo_Asignacion WHERE EquipoId = ?')->execute([$equipoId]);
+        $connection->prepare('UPDATE Estudiante SET EquipoId = NULL WHERE EquipoId = ?')->execute([$equipoId]);
+        $connection->prepare('DELETE FROM Formatos_Subidos WHERE EquipoId = ?')->execute([$equipoId]);
+        $connection->prepare('DELETE FROM Externo WHERE EquipoId = ?')->execute([$equipoId]);
+        $connection->prepare('DELETE FROM Equipo_TT WHERE EquipoId = ?')->execute([$equipoId]);
+
+        $connection->commit();
+        flash('success', 'El protocolo fue rechazado. El equipo quedó liberado para que el alumno corrija y vuelva a enviar.');
+    } catch (DomainException $exception) {
+        if (isset($connection) && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        flash('error', $exception->getMessage());
+    } catch (Throwable $exception) {
+        if (isset($connection) && $connection->inTransaction()) {
+            $connection->rollBack();
+        }
+        flash('error', 'No fue posible rechazar el protocolo. Intenta de nuevo.');
+    }
+    redirect('panelMiembroCatt.php?modal=revisiones');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'equipo') {
+    try {
+        crearEquipoTT(
             database(),
             (int) $user['id'],
             trim($_POST['titulo_equipo'] ?? ''),
@@ -50,19 +177,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'e
             enteros($_POST['sinodales'] ?? []),
             (int) ($_POST['seguimiento'] ?? 0)
         );
-        $resultado = ['ok' => true, 'message' => 'El equipo de TT fue registrado y sus directores, sinodales y profesor de seguimiento quedaron asignados.', 'html' => renderEquipoDetalleHtml(equipoPorId(database(), $equipoId))];
+        flash('success', 'El equipo de TT fue registrado y sus directores, sinodales y profesor de seguimiento quedaron asignados.');
     } catch (DomainException $exception) {
-        $resultado['message'] = $exception->getMessage();
+        flash('error', $exception->getMessage());
     } catch (Throwable $exception) {
-        $resultado['message'] = 'No fue posible registrar el equipo. Intenta de nuevo.';
+        flash('error', 'No fue posible registrar el equipo. Intenta de nuevo.');
     }
-    if ($quiereJson) {
-        header('Content-Type: application/json; charset=UTF-8');
-        http_response_code($resultado['ok'] ? 200 : 422);
-        echo json_encode($resultado, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-    flash($resultado['ok'] ? 'success' : 'error', $resultado['message']);
     redirect('panelMiembroCatt.php?modal=equipos');
 }
 
@@ -71,20 +191,37 @@ require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
 $modalPermitido = in_array($modal, ['perfil', 'revisiones', 'formatos', 'equipos'], true);
 
-$estudiantesLibres = $docentesDisponibles = $equiposRegistrados = [];
+$estudiantesLibres = $directoresDisponibles = $sinodalesDisponibles = $docentesDisponibles = $equiposRegistrados = $protocolosPendientes = [];
+$db = database();
+$porRol = static function (string $rol) use ($db): array {
+    $query = $db->prepare('SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId WHERE ur.Rol = ? ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre');
+    $query->execute([$rol]);
+    return $query->fetchAll();
+};
 if ($modal === 'equipos') {
-    $db = database();
-    $estudiantesLibres = estudiantesSinEquipo($db);
-    $docentesDisponibles = docentesConCarga($db);
+    $estudiantesLibres = $db->query("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'estudiante' JOIN Estudiante e ON e.UserId = u.UserId WHERE e.EquipoId IS NULL ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
+    $directoresDisponibles = $porRol('director');
+    $sinodalesDisponibles = $porRol('sinodal');
+    $docentesDisponibles = $db->query("SELECT DISTINCT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol IN ('director', 'sinodal') ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
     $equiposRegistrados = array_map(
         static fn (array $equipo): array => equipoCompleto($db, $equipo),
         $db->query('SELECT EquipoId, TituloProtocolo, Descripcion, RepresentanteUserId FROM Equipo_TT ORDER BY EquipoId DESC')->fetchAll()
     );
 }
+if ($modal === 'revisiones') {
+    foreach (protocolosPendientesDeRevision($db) as $pendiente) {
+        $equipoId = (int) $pendiente['EquipoId'];
+        $pendiente['integrantes'] = integrantesDeEquipo($db, $equipoId);
+        $pendiente['docentes'] = docentesDeEquipo($db, $equipoId);
+        $pendiente['sinodalesDisponibles'] = sinodalesElegiblesParaEquipo($db, $equipoId);
+        $protocolosPendientes[] = $pendiente;
+    }
+}
 
 $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion FROM calendario c WHERE COALESCE(c.fecha_fin, c.fecha) >= CURRENT_DATE AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?)) ORDER BY c.fecha ASC LIMIT 3");
 $query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
+$protocolosPendientesCount = (int) database()->query("SELECT COUNT(*) FROM Formatos_Subidos fs JOIN Catalogo_Formatos cf ON cf.TipoFormatoId = fs.TipoFormatoId AND cf.Clave = 'Protocolo' WHERE fs.Status = 'Pendiente'")->fetchColumn();
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -104,7 +241,7 @@ $proximasFechas = $query->fetchAll();
                 <h2>Protocolos de TT</h2>
                 <p class="card-copy">Revisa los protocolos registrados por los alumnos y emite el dictamen correspondiente de la CATT.</p>
                 <div class="stat-row">
-                    <strong>0</strong>
+                    <strong><?= $protocolosPendientesCount ?></strong>
                     <span>pendientes por revisar</span>
                 </div>
                 <a class="card-list-link" href="panelMiembroCatt.php?modal=revisiones&amp;tipo=protocolo">Ver lista</a>
@@ -171,91 +308,106 @@ $proximasFechas = $query->fetchAll();
             </dl>
         </section>
     <?php elseif ($modal === 'revisiones'): ?>
-        <section class="dashboard-modal-content" aria-labelledby="modal-revisiones-title">
+        <section class="dashboard-modal-content modal-wide" aria-labelledby="modal-revisiones-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
-            <p class="eyebrow">Seguimiento</p><h2 id="modal-revisiones-title">Mis revisiones asignadas</h2>
-            <div class="empty-modal">
-                <span>—</span>
-                <h3>No tienes revisiones pendientes</h3>
-                <p>Ningun alumno ha enviado formatos para revisar.</p>
-                <a class="button button-primary" href="panelMiembroCatt.php?modal=formatos">Registrar un dictamen</a>
-            </div>
+            <p class="eyebrow">Seguimiento</p><h2 id="modal-revisiones-title">Protocolos por revisar</h2>
+            <?php if (!$protocolosPendientes): ?>
+                <div class="empty-modal">
+                    <span>—</span>
+                    <h3>No hay protocolos pendientes</h3>
+                    <p>Cuando un alumno envíe su protocolo aparecerá aquí para que lo autorices con sus tres sinodales.</p>
+                </div>
+            <?php else: ?>
+                <p class="modal-intro">Revisa el documento y, si está completo, autorízalo asignando los tres sinodales del equipo.</p>
+                <?php foreach ($protocolosPendientes as $pendiente): ?>
+                    <article class="protocol-pending">
+                        <header class="protocol-pending-head">
+                            <div>
+                                <strong><?= e($pendiente['TituloProtocolo']) ?></strong>
+                                <small>Equipo #<?= (int) $pendiente['EquipoId'] ?> · enviado el <?= e(date('d/m/Y', strtotime($pendiente['FechaSubida']))) ?></small>
+                            </div>
+                            <span class="status-chip status-chip--pendiente">Pendiente</span>
+                        </header>
+                        <p class="protocol-pending-desc"><?= e($pendiente['Descripcion']) ?></p>
+                        <ul class="protocol-pending-people">
+                            <li><strong>Integrantes:</strong> <?= e(implode(', ', array_map(static fn (array $i): string => nombreDeUsuario($i) . ($i['EsRepresentante'] ? ' (representante)' : ''), $pendiente['integrantes'])) ?: '—') ?></li>
+                            <li><strong>Directores:</strong> <?= e(implode(', ', array_map(static fn (array $d): string => nombreDeUsuario($d) . ' · ' . etiquetaRolEquipo($d['Rol']), $pendiente['docentes'])) ?: '—') ?></li>
+                        </ul>
+                        <div class="protocol-pending-actions">
+                            <a class="button button-dark" href="descargarFormato.php?id=<?= (int) $pendiente['FormatoId'] ?>" target="_blank">Ver PDF</a>
+                            <details class="protocol-review">
+                                <summary>Autorizar y asignar sinodales</summary>
+                                <form method="post" class="protocol-review-form">
+                                    <?= csrfField() ?>
+                                    <input type="hidden" name="formulario" value="autorizar_protocolo">
+                                    <input type="hidden" name="formato_id" value="<?= (int) $pendiente['FormatoId'] ?>">
+                                    <label for="sinodales-<?= (int) $pendiente['FormatoId'] ?>">Selecciona exactamente tres sinodales (usa Ctrl para elegir varios)</label>
+                                    <select id="sinodales-<?= (int) $pendiente['FormatoId'] ?>" name="sinodales[]" multiple size="6" class="multi-select" required>
+                                        <?php foreach ($pendiente['sinodalesDisponibles'] as $sinodal): ?>
+                                            <option value="<?= e((string) $sinodal['UserId']) ?>"><?= e(nombreDeUsuario($sinodal)) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <?php if (count($pendiente['sinodalesDisponibles']) < 3): ?>
+                                        <p class="field-hint">Hay menos de tres sinodales elegibles para este equipo (los directores del propio protocolo no se ofrecen como sinodales). Registra más docentes con rol sinodal para poder autorizar.</p>
+                                    <?php endif; ?>
+                                    <button class="button button-primary" type="submit">Autorizar protocolo</button>
+                                </form>
+                            </details>
+                            <form method="post" class="protocol-reject-form" onsubmit="return confirm('¿Rechazar este protocolo? El equipo quedará liberado y el alumno deberá enviarlo de nuevo.');">
+                                <?= csrfField() ?>
+                                <input type="hidden" name="formulario" value="rechazar_protocolo">
+                                <input type="hidden" name="formato_id" value="<?= (int) $pendiente['FormatoId'] ?>">
+                                <button class="protocol-reject" type="submit">Rechazar</button>
+                            </form>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </section>
     <?php elseif ($modal === 'equipos'): ?>
         <?php
-        $selector = static function (string $id, string $titulo, string $nombre, int $max, string $tipo, array $personas, bool $conCarga) : void {
-            ?>
-            <fieldset class="picker" data-picker data-max="<?= $max ?>" data-role="<?= e($id) ?>" data-label="<?= e(mb_strtolower($titulo)) ?>">
-                <legend><?= e($titulo) ?> <span class="picker-count" data-count><?= $max > 0 ? "0/{$max}" : '0' ?></span></legend>
-                <input type="search" class="picker-search" placeholder="Buscar por nombre…" aria-label="Buscar <?= e(mb_strtolower($titulo)) ?>" autocomplete="off">
-                <div class="picker-chips" data-chips aria-live="polite"></div>
-                <div class="picker-options">
-                    <?php foreach ($personas as $persona): $carga = (int) ($persona['Carga'] ?? 0); $lleno = $conCarga && $carga >= MAX_EQUIPOS_POR_DOCENTE; ?>
-                        <label class="picker-option<?= $lleno ? ' is-disabled' : '' ?>" data-id="<?= e((string) $persona['UserId']) ?>" data-name="<?= e(nombreDeUsuario($persona)) ?>" data-sort="<?= e(claveAlfabetica($persona)) ?>" data-search="<?= e(mb_strtolower(nombreDeUsuario($persona) . ' ' . ($persona['NumeroBoleta'] ?? ''))) ?>"<?= $conCarga ? ' data-load="' . $carga . '" data-max-load="' . MAX_EQUIPOS_POR_DOCENTE . '"' : '' ?>>
-                                <input type="<?= e($tipo) ?>" name="<?= e($nombre) ?>" value="<?= e((string) $persona['UserId']) ?>"<?= $lleno ? ' disabled' : '' ?>>
-                                <span class="picker-name"><?= e(nombreDeUsuario($persona)) ?></span>
-                                <small class="picker-meta" data-meta><?= $conCarga ? e($lleno ? 'Límite alcanzado' : "{$carga} de " . MAX_EQUIPOS_POR_DOCENTE . ' equipos') : e($persona['NumeroBoleta'] ?? '') ?></small>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
-                <p class="picker-empty" data-empty<?= $personas ? ' hidden' : '' ?>><?= $personas ? 'Sin resultados.' : 'No hay opciones disponibles.' ?></p>
-            </fieldset>
-            <?php
+        $opciones = static function (array $usuarios): void {
+            foreach ($usuarios as $usuario) {
+                echo '<option value="' . e((string) $usuario['UserId']) . '">' . e(nombreDeUsuario($usuario)) . '</option>';
+            }
         };
         ?>
-        <section class="dashboard-modal-content modal-wide" aria-labelledby="modal-equipos-title">
+        <section class="dashboard-modal-content" aria-labelledby="modal-equipos-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
             <p class="eyebrow">Equipos de TT</p><h2 id="modal-equipos-title">Asignar equipo de TT</h2>
-            <p class="modal-intro">Elige los integrantes y se validará al instante. El representante será el primer estudiante en orden alfabético y cada docente puede tener máximo <?= MAX_EQUIPOS_POR_DOCENTE ?> equipos.</p>
-
-            <div class="alert" data-feedback hidden role="alert"></div>
-
-            <form method="post" class="modal-form team-form" data-team-form novalidate>
+            <p class="modal-intro">El representante será el primer estudiante en orden alfabético. Cada docente puede tener máximo <?= MAX_EQUIPOS_POR_DOCENTE ?> equipos. Usa Ctrl para elegir varias opciones.</p>
+            <form method="post" class="modal-form">
                 <input type="hidden" name="formulario" value="equipo">
 
-                <div class="team-form-fields">
-                    <div>
-                        <label for="titulo_equipo">Título del protocolo <small class="field-counter" data-title-counter>0/100</small></label>
-                        <input type="text" id="titulo_equipo" name="titulo_equipo" maxlength="100" required>
-                    </div>
-                    <div>
-                        <label for="descripcion_equipo">Descripción</label>
-                        <textarea id="descripcion_equipo" name="descripcion_equipo" rows="2" required></textarea>
-                    </div>
-                </div>
+                <label for="titulo_equipo">Título del protocolo</label>
+                <input type="text" id="titulo_equipo" name="titulo_equipo" maxlength="100" required>
 
-                <div class="team-pickers">
-                    <?php
-                    $selector('estudiantes', 'Estudiantes', 'estudiantes[]', 0, 'checkbox', $estudiantesLibres, false);
-                    $selector('directores', 'Directores', 'directores[]', 2, 'checkbox', array_values(array_filter($docentesDisponibles, static fn (array $d): bool => in_array('director', $d['Roles'], true))), true);
-                    $selector('sinodales', 'Sinodales', 'sinodales[]', 3, 'checkbox', array_values(array_filter($docentesDisponibles, static fn (array $d): bool => in_array('sinodal', $d['Roles'], true))), true);
-                    $selector('seguimiento', 'Profesor de seguimiento', 'seguimiento', 1, 'radio', $docentesDisponibles, true);
-                    ?>
-                </div>
+                <label for="descripcion_equipo">Descripción</label>
+                <textarea id="descripcion_equipo" name="descripcion_equipo" rows="3" required></textarea>
 
-                <aside class="team-summary" aria-live="polite">
-                    <p class="team-rep">Representante: <strong data-rep>—</strong></p>
-                    <ul class="team-checklist" data-checklist>
-                        <li data-check="titulo">Título y descripción</li>
-                        <li data-check="estudiantes">Al menos 1 estudiante</li>
-                        <li data-check="directores">2 directores</li>
-                        <li data-check="sinodales">3 sinodales</li>
-                        <li data-check="seguimiento">1 profesor de seguimiento</li>
-                    </ul>
-                </aside>
+                <label for="estudiantes">Estudiantes del equipo (sin equipo asignado)</label>
+                <select id="estudiantes" name="estudiantes[]" multiple size="4" required><?php $opciones($estudiantesLibres); ?></select>
 
-                <button class="button button-primary" type="submit" data-submit disabled>Registrar equipo <span>→</span></button>
+                <label for="directores">Directores (2)</label>
+                <select id="directores" name="directores[]" multiple size="3" required><?php $opciones($directoresDisponibles); ?></select>
+
+                <label for="sinodales">Sinodales (3)</label>
+                <select id="sinodales" name="sinodales[]" multiple size="4" required><?php $opciones($sinodalesDisponibles); ?></select>
+
+                <label for="seguimiento">Profesor de seguimiento</label>
+                <select id="seguimiento" name="seguimiento" required><option value="">Selecciona una opción</option><?php $opciones($docentesDisponibles); ?></select>
+
+                <button class="button button-primary" type="submit">Registrar equipo <span>→</span></button>
             </form>
 
-            <div class="panel-header team-list-header">
-                <h3>Equipos registrados (<span data-team-count><?= count($equiposRegistrados) ?></span>)</h3>
-                <input type="search" class="picker-search" data-team-filter placeholder="Filtrar equipos…" aria-label="Filtrar equipos registrados" autocomplete="off">
+            <h3>Equipos registrados (<?= count($equiposRegistrados) ?>)</h3>
+            <div class="activity-summary">
+                <?php if (!$equiposRegistrados): ?>
+                    <p>Aún no hay equipos registrados.</p>
+                <?php else: foreach ($equiposRegistrados as $equipo): renderEquipoDetalle($equipo); endforeach; endif; ?>
             </div>
-            <div class="activity-summary" data-team-list>
-                <?php foreach ($equiposRegistrados as $equipo): renderEquipoDetalle($equipo); endforeach; ?>
-            </div>
-            <p class="picker-empty" data-team-empty<?= $equiposRegistrados ? ' hidden' : '' ?>>Aún no hay equipos registrados.</p>
-        </section>    <?php elseif ($modal === 'formatos'): ?>
+        </section>
+    <?php elseif ($modal === 'formatos'): ?>
         <section class="dashboard-modal-content" aria-labelledby="modal-formatos-title">
             <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
             <p class="eyebrow">Nuevo dictamen</p><h2 id="modal-formatos-title">Registrar dictamen de la CATT</h2><p class="modal-intro">Captura el resultado de la revisión de un alumno.</p>
@@ -297,5 +449,4 @@ document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && document.querySelector('.dashboard-modal.is-open')) { window.location.href = 'panelMiembroCatt.php'; }
 });
 </script>
-<?php if ($modal === 'equipos'): ?><script src="assets/js/equipos.js"></script><?php endif; ?>
 <?php require __DIR__ . '/../app/views/footer.php'; ?>
