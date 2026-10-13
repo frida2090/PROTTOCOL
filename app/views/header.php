@@ -19,6 +19,8 @@ $userPanelUrl = $user ? match ($user['rol']) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle) ?> | PROTTOCOL CATT</title>
     <link rel="stylesheet" href="assets/css/styles.css">
+    <link rel="stylesheet" href="assets/css/responsive.css">
+    <script src="assets/js/app.js" defer></script>
 </head>
 <body>
 <header class="site-header">
@@ -26,7 +28,8 @@ $userPanelUrl = $user ? match ($user['rol']) {
         <img src="assets/img/prottocol.webp" alt="Logo PROTTOCOL">
         <span>CATT <small>Actividades académicas</small></span>
     </a>
-    <nav class="main-nav" aria-label="Navegación principal">
+    <button class="nav-toggle" type="button" data-nav-toggle aria-controls="main-nav" aria-expanded="false" aria-label="Abrir menú"><span></span><span></span><span></span></button>
+    <nav class="main-nav" id="main-nav" aria-label="Navegación principal">
         <?php if ($user): ?>
             <a href="calendario.php">Calendario</a>
             <a href="directorio.php">Directorio académico</a>

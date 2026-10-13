@@ -171,6 +171,38 @@ function equiposDelDocente(PDO $db, int $userId): array
     return array_map(static fn (array $equipo): array => equipoCompleto($db, $equipo), $query->fetchAll());
 }
 
+function estudiantesSinEquipo(PDO $db): array
+{
+    $filas = $db->query("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno, e.NumeroBoleta FROM Estudiante e JOIN Usuarios u ON u.UserId = e.UserId JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'estudiante' WHERE e.EquipoId IS NULL")->fetchAll();
+    usort($filas, static fn (array $a, array $b): int => strcmp(claveAlfabetica($a), claveAlfabetica($b)));
+    return $filas;
+}
+
+function docentesConCarga(PDO $db): array
+{
+    $filas = $db->query("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno, GROUP_CONCAT(DISTINCT ur.Rol) AS Roles, (SELECT COUNT(*) FROM EmpleadoEquipo ee WHERE ee.UserId = u.UserId) AS Carga FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol IN ('director', 'sinodal') GROUP BY u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno")->fetchAll();
+    usort($filas, static fn (array $a, array $b): int => strcmp(claveAlfabetica($a), claveAlfabetica($b)));
+    return array_map(static function (array $fila): array {
+        $fila['Roles'] = explode(',', $fila['Roles']);
+        $fila['Carga'] = (int) $fila['Carga'];
+        return $fila;
+    }, $filas);
+}
+
+function equipoPorId(PDO $db, int $equipoId): array
+{
+    $query = $db->prepare('SELECT EquipoId, TituloProtocolo, Descripcion, RepresentanteUserId FROM Equipo_TT WHERE EquipoId = ?');
+    $query->execute([$equipoId]);
+    return equipoCompleto($db, $query->fetch());
+}
+
+function renderEquipoDetalleHtml(array $equipo, bool $mostrarMiRol = false): string
+{
+    ob_start();
+    renderEquipoDetalle($equipo, $mostrarMiRol);
+    return (string) ob_get_clean();
+}
+
 function etiquetaRolEquipo(?string $rol): string
 {
     $etiquetas = array_map(static fn (string $r): string => ETIQUETAS_ROL_EQUIPO[$r] ?? ucfirst($r), explode(',', (string) $rol));
