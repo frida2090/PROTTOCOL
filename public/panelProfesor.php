@@ -63,6 +63,7 @@ foreach ($assignedTeams as $team) {
         $equiposOtros[] = $team;
     }
 }
+$evaluacionesPendientes = pendientesEvaluacionParaSinodal(database(), (int) $user['id']);
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -109,6 +110,25 @@ foreach ($assignedTeams as $team) {
                 </div>
                 <a class="card-list-link" href="panelProfesor.php?modal=revisiones&amp;tipo=trabajo-terminal-ii">Ver lista</a>
             </article>
+        </section>
+
+        <section class="dashboard-panel">
+            <div class="panel-header"><h2>Evaluaciones de protocolo pendientes</h2><span><?= count($evaluacionesPendientes) ?></span></div>
+            <div class="activity-summary">
+                <?php if (!$evaluacionesPendientes): ?>
+                    <p>No tienes evaluaciones de protocolo pendientes.</p>
+                <?php else: foreach ($evaluacionesPendientes as $eval): ?>
+                    <article class="summary-item">
+                        <span class="summary-date">TT</span>
+                        <div>
+                            <strong><?= e($eval['TituloProtocolo']) ?></strong>
+                            <small><?= e($eval['Descripcion']) ?></small>
+                            <small>Equipo #<?= (int) $eval['EquipoId'] ?> · versión <?= numeroEntregaEquipo(database(), (int) $eval['EquipoId']) ?>a</small>
+                            <a class="button button-primary" href="evaluarProtocolo.php?formato=<?= (int) $eval['FormatoId'] ?>">Evaluar protocolo <span>→</span></a>
+                        </div>
+                    </article>
+                <?php endforeach; endif; ?>
+            </div>
         </section>
 
         <section class="dashboard-panel">

@@ -222,7 +222,7 @@ CREATE TABLE Formatos_Subidos(
     TipoFormatoId INT UNSIGNED NOT NULL,
     FormatoSubido MEDIUMBLOB NOT NULL,
     FechaSubida TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    Status ENUM('Pendiente', 'Aprobado', 'Rechazado') NOT NULL DEFAULT 'Pendiente',
+    Status ENUM('Pendiente', 'Rechazado', 'Aprobado', 'RechazadoSinodales', 'AprobadoSinodales') NOT NULL DEFAULT 'Pendiente',
     Observaciones TEXT NULL,
     UserId INT UNSIGNED, -- Usuario que revisa el formato (miembro Catt)
     FechaRevision TIMESTAMP NULL,

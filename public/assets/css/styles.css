@@ -179,3 +179,35 @@ a.card-list-link:focus { background-color: #7a1f3d; color: #ffffff; }
 .protocol-reject { background: transparent; border: 1px solid #c0392b; border-radius: 999px; color: #c0392b; cursor: pointer; font: inherit; font-size: .74rem; font-weight: 700; padding: 8px 16px; }
 .protocol-reject:hover { background: #c0392b; color: var(--white); }
 @media (max-width: 720px) { .protocol-externo-fields { grid-template-columns: 1fr; }.protocol-pending-head { flex-direction: column; }.protocol-doc-link { margin-left: 0; }.dashboard-modal-content.modal-wide { max-height: 92vh; } }
+
+/* --- Flujo de evaluación de protocolos por sinodales --- */
+.status-chip--correccion { background: #fbe9e3; color: #9c4326; }
+.status-chip--pendiente { background: #f7ecd7; color: #8a6117; }
+.observaciones-box { background: #fbf6f1; border: 1px solid #e8d4c2; border-left: 4px solid var(--wine); margin-top: 16px; padding: 14px 16px; }
+.observaciones-box strong { display: block; font-size: .82rem; margin-bottom: 6px; }
+.observaciones-box p { color: var(--muted); font-size: .86rem; margin: 0 0 8px; }
+.observaciones-box p:last-child { margin-bottom: 0; }
+.observaciones-box.aprobado-box { background: #eef5ef; border-color: #cfe0d2; border-left-color: #245c32; }
+.observaciones-box.aprobado-box strong { color: #245c32; }
+.protocol-tt-line { font-size: .92rem; margin: 8px 0 0; }
+.protocol-tt-line strong { color: var(--wine); }
+
+.evaluar-panel { max-width: 900px; }
+.dictamen-section { margin-top: 22px; }
+.dictamen-section > h3 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.15rem; margin: 0 0 10px; }
+.dictamen-encabezado { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: .86rem; margin: 0 0 18px; }
+.dictamen-encabezado p { margin: 0; }
+.dictamen-encabezado strong { color: var(--ink); }
+.dictamen-table { border-collapse: collapse; font-size: .86rem; margin-top: 8px; width: 100%; }
+.dictamen-table th, .dictamen-table td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; vertical-align: top; }
+.dictamen-table th { background: #f9f7f5; font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+.dictamen-table td.dictamen-op { text-align: center; white-space: nowrap; }
+.dictamen-table td.dictamen-obs { color: var(--muted); }
+.dictamen-fieldset { border: 1px solid var(--line); margin-top: 22px; padding: 18px; }
+.dictamen-fieldset legend { font-size: .82rem; font-weight: 700; padding: 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+.radio-inline { align-items: center; display: inline-flex; font-size: .88rem; gap: 8px; margin: 0 22px 0 0; }
+.dictamen-firma { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 18px; }
+.dictamen-firma .field { flex: 1; min-width: 220px; }
+.dictamen-actions { margin-top: 22px; }
+@media (max-width: 720px) { .dictamen-table { font-size: .78rem; }.dictamen-firma { flex-direction: column; } }
+

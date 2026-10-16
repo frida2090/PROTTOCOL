@@ -209,7 +209,7 @@ function etiquetaRolEquipo(?string $rol): string
     return implode(', ', $etiquetas);
 }
 
-function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false, ?array $protocolo = null): void
+function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false, ?array $protocolo = null, ?string $numeroTT = null): void
 {
     ?>
     <article class="summary-item">
@@ -230,6 +230,15 @@ function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false, ?array $
                     <?php if (!empty($protocolo['FechaSubida'])): ?><small>Protocolo enviado el <?= e(date('d/m/Y', strtotime((string) $protocolo['FechaSubida']))) ?></small><?php endif; ?>
                     <a class="protocol-doc-link" href="descargarFormato.php?id=<?= (int) $protocolo['FormatoId'] ?>">Ver PDF</a>
                 </div>
+                <?php if ((string) $protocolo['Status'] === 'Rechazado' && !empty($protocolo['Observaciones'])): ?>
+                    <div class="observaciones-box">
+                        <strong>Observaciones de la CATT:</strong>
+                        <p><?= nl2br(e((string) $protocolo['Observaciones'])) ?></p>
+                    </div>
+                <?php endif; ?>
+                <?php if ($numeroTT !== null && $numeroTT !== ''): ?>
+                    <div class="protocol-tt-line"><strong>Número de TT:</strong> <?= e($numeroTT) ?></div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </article>

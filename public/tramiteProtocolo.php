@@ -16,6 +16,14 @@ if ($user['rol'] !== 'estudiante') {
 $studentId = (int) $user['id'];
 $error = null;
 
+// Estado actual del equipo/protocolo del alumno (para detectar modo reenvío).
+$connectionInicial = database();
+$miEquipoInicial = equipoDelEstudiante($connectionInicial, $studentId);
+$miProtocoloInicial = $miEquipoInicial ? protocoloDelEquipo($connectionInicial, (int) $miEquipoInicial['EquipoId']) : null;
+$esReenvio = $miEquipoInicial !== null && $miProtocoloInicial !== null
+    && in_array($miProtocoloInicial['Status'], ['Rechazado', 'RechazadoSinodales'], true);
+$esReenvioSinodales = $esReenvio && $miProtocoloInicial['Status'] === 'RechazadoSinodales';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrfValid()) {
         flash('error', 'La sesión expiró. Vuelve a abrir el formulario e intenta de nuevo.');
@@ -43,13 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Captura el título del Trabajo Terminal (máximo 100 caracteres).';
     } elseif ($descripcion === '') {
         $error = 'Captura la descripción u objetivos del Trabajo Terminal.';
-    } elseif (count($directores) < 1 || count($directores) > 2) {
+    } elseif (!$esReenvio && (count($directores) < 1 || count($directores) > 2)) {
         $error = 'Selecciona al menos un profesor director empleado (máximo dos).';
-    } elseif ($externoIncluido && count($directores) > 1) {
+    } elseif (!$esReenvio && $externoIncluido && count($directores) > 1) {
         $error = 'Un director externo solo puede integrarse si eliges un solo director empleado.';
-    } elseif ($externoIncluido && ($externo['nombre'] === '' || $externo['paterno'] === '' || !filter_var($externo['email'], FILTER_VALIDATE_EMAIL) || $externo['organizacion'] === '')) {
+    } elseif (!$esReenvio && $externoIncluido && ($externo['nombre'] === '' || $externo['paterno'] === '' || !filter_var($externo['email'], FILTER_VALIDATE_EMAIL) || $externo['organizacion'] === '')) {
         $error = 'Completa todos los datos del director externo (nombre, apellidos, correo y organización).';
-    } elseif (!$externoIncluido && ($externo['nombre'] !== '' || $externo['paterno'] !== '' || $externo['email'] !== '' || $externo['organizacion'] !== '')) {
+    } elseif (!$esReenvio && !$externoIncluido && ($externo['nombre'] !== '' || $externo['paterno'] !== '' || $externo['email'] !== '' || $externo['organizacion'] !== '')) {
         $error = 'Marca la casilla del director externo para capturar sus datos, o bórralos por completo.';
     } elseif (!$archivo || ($archivo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
         $error = 'Adjunta el archivo PDF con tu protocolo.';
@@ -78,6 +86,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($blob !== null && $error === null) {
         $connection = database();
+
+        // ---- Reenvío de un protocolo ya rechazado (por CATT o por sinodales) ----
+        if ($esReenvio) {
+            try {
+                $connection->beginTransaction();
+
+                $equipoId = (int) $miEquipoInicial['EquipoId'];
+
+                // Verificar que siga rechazado (puede haber cambiado entre la carga y el envío).
+                $vigenteQuery = $connection->prepare('SELECT fs.Status FROM Formatos_Subidos fs WHERE fs.FormatoId = ? FOR UPDATE');
+                $vigenteQuery->execute([(int) $miProtocoloInicial['FormatoId']]);
+                $statusVigente = (string) $vigenteQuery->fetchColumn();
+                if (!in_array($statusVigente, ['Rechazado', 'RechazadoSinodales'], true)) {
+                    throw new DomainException('El protocolo ya no está rechazado; no hay nada que reenviar.');
+                }
+
+                // Actualizar título y descripción del equipo (si se modificaron).
+                $connection->prepare('UPDATE Equipo_TT SET TituloProtocolo = ?, Descripcion = ? WHERE EquipoId = ?')
+                    ->execute([$titulo, $descripcion, $equipoId]);
+
+                // Límite de entregas ante dictamen de sinodales (máx. 2).
+                if ($statusVigente === 'RechazadoSinodales') {
+                    $entregasQuery = $connection->prepare("SELECT COUNT(*) FROM Formatos_Subidos WHERE EquipoId = ? AND Status IN ('Aprobado','RechazadoSinodales','AprobadoSinodales')");
+                    $entregasQuery->execute([$equipoId]);
+                    if ((int) $entregasQuery->fetchColumn() >= MAX_ENTREGAS_PROTOCOLO) {
+                        throw new DomainException('Ya no se permiten más entregas de este protocolo.');
+                    }
+                }
+
+                // Nueva versión del formato.
+                $tipoFormatoId = asegurarCatalogoProtocolo($connection);
+                $nuevoStatus = $statusVigente === 'RechazadoSinodales' ? 'Aprobado' : 'Pendiente';
+                $insert = $connection->prepare('INSERT INTO Formatos_Subidos (EquipoId, TipoFormatoId, FormatoSubido, Status) VALUES (?, ?, ?, ?)');
+                $insert->bindValue(1, $equipoId, PDO::PARAM_INT);
+                $insert->bindValue(2, $tipoFormatoId, PDO::PARAM_INT);
+                $insert->bindValue(3, $blob, PDO::PARAM_LOB);
+                $insert->bindValue(4, $nuevoStatus);
+                $insert->execute();
+
+                $connection->commit();
+                if ($statusVigente === 'RechazadoSinodales') {
+                    flash('success', 'Tu segunda entrega fue enviada. El sinodal que rechazó la versión anterior deberá re-evaluarla.');
+                } else {
+                    flash('success', 'Tu protocolo corregido fue reenviado. La CATT revisará el documento de nuevo.');
+                }
+                redirect('panelAlumno.php');
+            } catch (DomainException $exception) {
+                if ($connection->inTransaction()) {
+                    $connection->rollBack();
+                }
+                $error = $exception->getMessage();
+            } catch (PDOException $exception) {
+                if ($connection->inTransaction()) {
+                    $connection->rollBack();
+                }
+                $error = 'No fue posible reenviar el protocolo. Revisa la conexión con la base de datos.';
+            }
+        } else {
         try {
             $connection->beginTransaction();
 
@@ -183,6 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? 'No fue posible guardar el protocolo: algún dato ya está registrado o falta una relación requerida.'
                 : 'No fue posible enviar el protocolo. Revisa la conexión con la base de datos.';
         }
+        } // fin modo envío inicial
     }
 }
 
@@ -222,7 +289,55 @@ require __DIR__ . '/../app/views/header.php';
 
     <?php if ($error): ?><div class="alert alert-error"><?= e($error) ?></div><?php endif; ?>
 
-    <?php if ($miEquipo): ?>
+    <?php if ($esReenvio): ?>
+        <div class="form-panel wide-panel protocol-status-panel">
+            <p class="eyebrow">Corrección de protocolo</p>
+            <h2><?= e($miEquipoInicial['TituloProtocolo']) ?></h2>
+            <p class="protocol-status-line">
+                <span class="status-chip status-chip--<?= e(claseEstadoProtocolo((string) $miProtocoloInicial['Status'])) ?>"><?= e(etiquetaEstadoProtocolo((string) $miProtocoloInicial['Status'])) ?></span>
+                <small>Última versión enviada el <?= e(date('d/m/Y', strtotime((string) $miProtocoloInicial['FechaSubida']))) ?></small>
+                <a class="protocol-doc-link" href="descargarFormato.php?id=<?= (int) $miProtocoloInicial['FormatoId'] ?>">Ver PDF</a>
+            </p>
+
+            <?php if (!empty($miProtocoloInicial['Observaciones'])): ?>
+                <div class="observaciones-box">
+                    <strong>Observaciones de la CATT:</strong>
+                    <p><?= nl2br(e((string) $miProtocoloInicial['Observaciones'])) ?></p>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($esReenvioSinodales): ?>
+                <h3>Observaciones de los sinodales que rechazaron</h3>
+                <?php $dictamenesRechazo = array_filter(evaluacionesDeFormato(database(), (int) $miProtocoloInicial['FormatoId']), static fn (array $d): bool => $d['Dictamen'] === 'rechazado'); ?>
+                <?php if ($dictamenesRechazo): ?>
+                    <div class="observaciones-box">
+                        <?php foreach ($dictamenesRechazo as $dictamen): ?>
+                            <p><strong><?= e($dictamen['ApellidoPaterno'] . ' ' . $dictamen['ApellidoMaterno'] . ' ' . $dictamen['Nombre']) ?>:</strong>
+                            <?php if (!empty($dictamen['Observaciones'])): ?><?= nl2br(e((string) $dictamen['Observaciones'])) ?><?php else: ?>Sin observaciones adicionales.<?php endif; ?></p>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+                <p class="form-note">Debes subir una versión corregida de tu protocolo. El sinodal que rechazó deberá volver a evaluarlo.</p>
+            <?php else: ?>
+                <p class="form-note">Corrige tu protocolo según las observaciones y vuelve a enviarlo. La CATT lo revisará de nuevo.</p>
+            <?php endif; ?>
+
+            <form method="post" class="form-grid protocol-form" enctype="multipart/form-data" novalidate>
+                <?= csrfField() ?>
+                <input type="hidden" name="reenvio" value="1">
+
+                <div class="field field-full"><label for="titulo">Título del Trabajo Terminal</label><input id="titulo" name="titulo" maxlength="100" required value="<?= e($_POST['titulo'] ?? $miEquipoInicial['TituloProtocolo']) ?>"></div>
+                <div class="field field-full"><label for="descripcion">Descripción u objetivos</label><textarea id="descripcion" name="descripcion" rows="4" required><?= e($_POST['descripcion'] ?? $miEquipoInicial['Descripcion']) ?></textarea></div>
+                <div class="field field-full">
+                    <label for="archivo">Nueva versión del PDF <span class="field-hint">(máximo 10 MB)</span></label>
+                    <input id="archivo" name="archivo" type="file" accept="application/pdf,.pdf" class="file-input" required>
+                </div>
+                <div class="field-full"><button class="button button-primary" type="submit"><?= $esReenvioSinodales ? 'Enviar segunda entrega' : 'Reenviar protocolo corregido' ?> <span>→</span></button></div>
+            </form>
+            <p class="form-note">Integrantes, directores y sinodales permanecen fijos; solo se actualiza el documento, el título y la descripción.</p>
+            <p class="form-note"><a href="panelAlumno.php">Cancelar y volver a mi panel</a></p>
+        </div>
+    <?php elseif ($miEquipo): ?>
         <div class="form-panel wide-panel protocol-status-panel">
             <p class="eyebrow">Estado de tu solicitud</p>
             <h2><?= e($miEquipo['TituloProtocolo']) ?></h2>

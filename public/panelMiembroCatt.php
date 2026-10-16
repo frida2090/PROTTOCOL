@@ -115,9 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
     redirect('panelMiembroCatt.php?modal=revisiones');
 }
 
-// Rechazo de protocolos: libera al equipo para que el alumno pueda reintentar
+// Rechazo de protocolos: se marca como rechazado con observaciones para que el
+// alumno corrija y pueda volver a enviar (no se borra nada).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'rechazar_protocolo') {
     $formatoId = (int) ($_POST['formato_id'] ?? 0);
+    $observaciones = trim($_POST['observaciones_rechazo'] ?? '');
 
     try {
         if (!csrfValid()) {
@@ -125,6 +127,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'r
         }
         if ($formatoId < 1) {
             throw new DomainException('Selecciona un protocolo válido.');
+        }
+        if ($observaciones === '') {
+            throw new DomainException('Captura las observaciones de corrección para el alumno.');
         }
 
         $connection = database();
@@ -139,18 +144,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'r
         if ($formato['Status'] !== 'Pendiente') {
             throw new DomainException('El protocolo ya fue procesado por la CATT.');
         }
-        $equipoId = (int) $formato['EquipoId'];
 
-        // Se eliminan primero las filas hijas para no depender de ON DELETE CASCADE
-        $connection->prepare('DELETE FROM EmpleadoEquipo WHERE EquipoId = ?')->execute([$equipoId]);
-        $connection->prepare('DELETE FROM Equipo_Asignacion WHERE EquipoId = ?')->execute([$equipoId]);
-        $connection->prepare('UPDATE Estudiante SET EquipoId = NULL WHERE EquipoId = ?')->execute([$equipoId]);
-        $connection->prepare('DELETE FROM Formatos_Subidos WHERE EquipoId = ?')->execute([$equipoId]);
-        $connection->prepare('DELETE FROM Externo WHERE EquipoId = ?')->execute([$equipoId]);
-        $connection->prepare('DELETE FROM Equipo_TT WHERE EquipoId = ?')->execute([$equipoId]);
+        $update = $connection->prepare("UPDATE Formatos_Subidos SET Status = 'Rechazado', Observaciones = ?, UserId = ?, FechaRevision = CURRENT_TIMESTAMP WHERE FormatoId = ? AND Status = 'Pendiente'");
+        $update->execute([$observaciones, (int) $user['id'], $formatoId]);
+        if ($update->rowCount() !== 1) {
+            throw new DomainException('El protocolo ya fue procesado por la CATT.');
+        }
 
         $connection->commit();
-        flash('success', 'El protocolo fue rechazado. El equipo quedó liberado para que el alumno corrija y vuelva a enviar.');
+        flash('success', 'El protocolo fue rechazado con observaciones. El alumno podrá corregirlo y volver a enviarlo.');
     } catch (DomainException $exception) {
         if (isset($connection) && $connection->inTransaction()) {
             $connection->rollBack();
@@ -186,10 +188,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'e
     redirect('panelMiembroCatt.php?modal=equipos');
 }
 
+// Asignación del Número de TT a un protocolo aprobado por los sinodales
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'asignar_numero_tt') {
+    $equipoId = (int) ($_POST['equipo_id'] ?? 0);
+    $numeroTT = trim($_POST['numero_tt'] ?? '');
+
+    try {
+        if (!csrfValid()) {
+            throw new DomainException('La sesión expiró. Vuelve a abrir la lista e intenta de nuevo.');
+        }
+        if ($equipoId < 1) {
+            throw new DomainException('Selecciona un protocolo válido.');
+        }
+        $resultado = asignarNumeroTT(database(), $equipoId, $numeroTT, (int) $user['id']);
+        if (!$resultado['ok']) {
+            throw new DomainException($resultado['mensaje']);
+        }
+        flash('success', $resultado['mensaje']);
+    } catch (DomainException $exception) {
+        flash('error', $exception->getMessage());
+    } catch (Throwable $exception) {
+        flash('error', 'No fue posible asignar el número de TT. Intenta de nuevo.');
+    }
+    redirect('panelMiembroCatt.php?modal=numero_tt');
+}
+
 $pageTitle = 'Panel del Miembro · CATT';
 require __DIR__ . '/../app/views/header.php';
 $modal = $_GET['modal'] ?? '';
-$modalPermitido = in_array($modal, ['perfil', 'revisiones', 'formatos', 'equipos'], true);
+$modalPermitido = in_array($modal, ['perfil', 'revisiones', 'formatos', 'equipos', 'numero_tt'], true);
 
 $estudiantesLibres = $directoresDisponibles = $sinodalesDisponibles = $docentesDisponibles = $equiposRegistrados = $protocolosPendientes = [];
 $db = database();
@@ -215,6 +242,15 @@ if ($modal === 'revisiones') {
         $pendiente['docentes'] = docentesDeEquipo($db, $equipoId);
         $pendiente['sinodalesDisponibles'] = sinodalesElegiblesParaEquipo($db, $equipoId);
         $protocolosPendientes[] = $pendiente;
+    }
+}
+$protocolosListosTT = [];
+if ($modal === 'numero_tt') {
+    foreach (protocolosListosParaNumeroTT($db) as $pendiente) {
+        $equipoId = (int) $pendiente['EquipoId'];
+        $pendiente['integrantes'] = integrantesDeEquipo($db, $equipoId);
+        $pendiente['docentes'] = docentesDeEquipo($db, $equipoId);
+        $protocolosListosTT[] = $pendiente;
     }
 }
 
@@ -245,6 +281,7 @@ $protocolosPendientesCount = (int) database()->query("SELECT COUNT(*) FROM Forma
                     <span>pendientes por revisar</span>
                 </div>
                 <a class="card-list-link" href="panelMiembroCatt.php?modal=revisiones&amp;tipo=protocolo">Ver lista</a>
+                <a class="card-list-link" href="panelMiembroCatt.php?modal=numero_tt">Asignar número de TT</a>
             </article>
 
             <article class="dashboard-card">
@@ -353,13 +390,53 @@ $protocolosPendientesCount = (int) database()->query("SELECT COUNT(*) FROM Forma
                                     <button class="button button-primary" type="submit">Autorizar protocolo</button>
                                 </form>
                             </details>
-                            <form method="post" class="protocol-reject-form" onsubmit="return confirm('¿Rechazar este protocolo? El equipo quedará liberado y el alumno deberá enviarlo de nuevo.');">
+                            <form method="post" class="protocol-reject-form">
                                 <?= csrfField() ?>
                                 <input type="hidden" name="formulario" value="rechazar_protocolo">
                                 <input type="hidden" name="formato_id" value="<?= (int) $pendiente['FormatoId'] ?>">
-                                <button class="protocol-reject" type="submit">Rechazar</button>
+                                <label class="protocol-reject-label" for="obs-rechazo-<?= (int) $pendiente['FormatoId'] ?>">Observaciones de corrección (obligatorias)</label>
+                                <textarea id="obs-rechazo-<?= (int) $pendiente['FormatoId'] ?>" name="observaciones_rechazo" rows="3" required placeholder="Describe lo que el alumno debe corregir."></textarea>
+                                <button class="protocol-reject" type="submit" onclick="return confirm('¿Rechazar este protocolo con las observaciones indicadas?');">Rechazar</button>
                             </form>
                         </div>
+                    </article>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </section>
+    <?php elseif ($modal === 'numero_tt'): ?>
+        <section class="dashboard-modal-content modal-wide" aria-labelledby="modal-numero-tt-title">
+            <button class="modal-close" type="button" data-close-modal aria-label="Cerrar">×</button>
+            <p class="eyebrow">Asignación de TT</p><h2 id="modal-numero-tt-title">Protocolos aprobados · asignar número de TT</h2>
+            <?php if (!$protocolosListosTT): ?>
+                <div class="empty-modal">
+                    <span>—</span>
+                    <h3>No hay protocolos aprobados sin número de TT</h3>
+                    <p>Cuando los sinodales aprueben un protocolo aparecerá aquí para que le asignes su número de TT.</p>
+                </div>
+            <?php else: ?>
+                <p class="modal-intro">Estos protocolos fueron aprobados por la comisión de sinodales. Asigna a cada uno su número de TT para registrarlo en el sistema.</p>
+                <?php foreach ($protocolosListosTT as $pendiente): ?>
+                    <article class="protocol-pending">
+                        <header class="protocol-pending-head">
+                            <div>
+                                <strong><?= e($pendiente['TituloProtocolo']) ?></strong>
+                                <small>Equipo #<?= (int) $pendiente['EquipoId'] ?> · aprobado el <?= !empty($pendiente['FechaRevision']) ? e(date('d/m/Y', strtotime($pendiente['FechaRevision']))) : '—' ?></small>
+                            </div>
+                            <span class="status-chip status-chip--aprobado">Aprobado</span>
+                        </header>
+                        <p class="protocol-pending-desc"><?= e($pendiente['Descripcion']) ?></p>
+                        <ul class="protocol-pending-people">
+                            <li><strong>Integrantes:</strong> <?= e(implode(', ', array_map(static fn (array $i): string => nombreDeUsuario($i) . ($i['EsRepresentante'] ? ' (representante)' : ''), $pendiente['integrantes'])) ?: '—') ?></li>
+                            <li><strong>Directores:</strong> <?= e(implode(', ', array_map(static fn (array $d): string => nombreDeUsuario($d) . ' · ' . etiquetaRolEquipo($d['Rol']), $pendiente['docentes'])) ?: '—') ?></li>
+                        </ul>
+                        <form method="post" class="protocol-reject-form">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="formulario" value="asignar_numero_tt">
+                            <input type="hidden" name="equipo_id" value="<?= (int) $pendiente['EquipoId'] ?>">
+                            <label for="numero-tt-<?= (int) $pendiente['EquipoId'] ?>">Número de TT (ej. TT-2026-001)</label>
+                            <input type="text" id="numero-tt-<?= (int) $pendiente['EquipoId'] ?>" name="numero_tt" maxlength="20" required placeholder="TT-2026-001">
+                            <button class="button button-primary" type="submit">Asignar número de TT</button>
+                        </form>
                     </article>
                 <?php endforeach; ?>
             <?php endif; ?>

@@ -43,6 +43,11 @@ $query->execute([$user['id']]);
 $proximasFechas = $query->fetchAll();
 $miEquipo = equipoDelEstudiante(database(), (int) $user['id']);
 $miProtocolo = $miEquipo ? protocoloDelEquipo(database(), (int) $miEquipo['EquipoId']) : null;
+$miTT = $miEquipo ? ttDeEquipo(database(), (int) $miEquipo['EquipoId']) : null;
+$miEvaluaciones = ($miEquipo && $miProtocolo) ? evaluacionesDeEquipo(database(), (int) $miEquipo['EquipoId']) : [];
+// Rechazos de sinodales sobre la versión vigente del protocolo.
+$miRechazosSinodales = array_values(array_filter($miEvaluaciones, static fn (array $d): bool => $d['Dictamen'] === 'rechazado' && (int) $d['FormatoId'] === (int) ($miProtocolo['FormatoId'] ?? 0)));
+$esReenvioDisponible = $miProtocolo !== null && in_array($miProtocolo['Status'], ['Rechazado', 'RechazadoSinodales'], true);
 ?>
 <div class="dashboard-container">
     <?php renderSidebar('inicio'); ?>
@@ -81,13 +86,32 @@ $miProtocolo = $miEquipo ? protocoloDelEquipo(database(), (int) $miEquipo['Equip
         </section>
 
         <section class="dashboard-panel">
-            <div class="panel-header"><h2>Mi equipo de TT</h2><?php if ($miEquipo && !$miProtocolo): ?><a href="tramiteProtocolo.php">Enviar mi protocolo</a><?php endif; ?></div>
+            <div class="panel-header"><h2>Mi equipo de TT</h2><?php if ($esReenvioDisponible): ?><a href="tramiteProtocolo.php">Corregir y reenviar</a><?php elseif ($miEquipo && !$miProtocolo): ?><a href="tramiteProtocolo.php">Enviar mi protocolo</a><?php endif; ?></div>
             <div class="activity-summary">
                 <?php if (!$miEquipo): ?>
                     <p>Aún no tienes un equipo asignado. La CATT te asignará uno junto con tus directores y sinodales.</p>
                     <p><a class="button button-primary" href="tramiteProtocolo.php">Iniciar mi protocolo <span>→</span></a></p>
                 <?php else: ?>
-                    <?php renderEquipoDetalle($miEquipo, false, $miProtocolo); ?>
+                    <?php renderEquipoDetalle($miEquipo, false, $miProtocolo, $miTT ? (string) $miTT['NumeroTT'] : null); ?>
+
+                    <?php if ((string) ($miProtocolo['Status'] ?? '') === 'RechazadoSinodales' && $miRechazosSinodales): ?>
+                        <div class="observaciones-box">
+                            <strong>Observaciones de los sinodales que rechazaron:</strong>
+                            <?php foreach ($miRechazosSinodales as $dictamen): ?>
+                                <p><strong><?= e($dictamen['ApellidoPaterno'] . ' ' . $dictamen['ApellidoMaterno'] . ' ' . $dictamen['Nombre']) ?>:</strong>
+                                <?php if (!empty($dictamen['Observaciones'])): ?><?= nl2br(e((string) $dictamen['Observaciones'])) ?><?php else: ?>Sin observaciones adicionales.<?php endif; ?></p>
+                            <?php endforeach; ?>
+                            <p><a class="button button-primary" href="tramiteProtocolo.php">Subir segunda entrega <span>→</span></a></p>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ((string) ($miProtocolo['Status'] ?? '') === 'AprobadoSinodales'): ?>
+                        <div class="observaciones-box aprobado-box">
+                            <strong>¡Protocolo aprobado!</strong>
+                            <p>Tu protocolo fue dictaminado como aprobado por la comisión de sinodales.</p>
+                            <?php if ($miTT): ?><p><strong>Número de TT:</strong> <?= e((string) $miTT['NumeroTT']) ?></p><?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </section>
