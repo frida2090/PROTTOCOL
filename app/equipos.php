@@ -229,6 +229,9 @@ function renderEquipoDetalle(array $equipo, bool $mostrarMiRol = false, ?array $
                     <span class="status-chip status-chip--<?= e(claseEstadoProtocolo((string) $protocolo['Status'])) ?>"><?= e(etiquetaEstadoProtocolo((string) $protocolo['Status'])) ?></span>
                     <?php if (!empty($protocolo['FechaSubida'])): ?><small>Protocolo enviado el <?= e(date('d/m/Y', strtotime((string) $protocolo['FechaSubida']))) ?></small><?php endif; ?>
                     <a class="protocol-doc-link" href="descargarFormato.php?id=<?= (int) $protocolo['FormatoId'] ?>">Ver PDF</a>
+                    <?php if ((int) ($protocolo['TotalEvaluaciones'] ?? 0) > 0): ?>
+                        <a class="protocol-doc-link" href="verEvaluacionProtocolo.php?formato=<?= (int) $protocolo['FormatoId'] ?>">Ver dictámenes</a>
+                    <?php endif; ?>
                 </div>
                 <?php if ((string) $protocolo['Status'] === 'Rechazado' && !empty($protocolo['Observaciones'])): ?>
                     <div class="observaciones-box">

@@ -69,19 +69,7 @@ $sinodalQuery = $db->prepare('SELECT u.Nombre, u.ApellidoPaterno, u.ApellidoMate
 $sinodalQuery->execute([$sinodalId]);
 $sinodal = $sinodalQuery->fetch() ?: [];
 
-// Las 10 preguntas del formato de evaluación de protocolo (formatoEvaluacionProtocoloTT2019).
-$preguntas = [
-    1 => 'Título del TT. ¿El título corresponde al producto esperado?',
-    2 => 'Resumen. ¿El resumen expresa claramente la propuesta del TT, su importancia y aplicación?',
-    3 => 'Palabras clave. ¿Las palabras clave han sido clasificadas adecuadamente?',
-    4 => 'Introducción. ¿La presentación del problema a resolver es comprensible?',
-    5 => 'Objetivo. ¿El objetivo es preciso y relevante?',
-    6 => 'Planteamiento. ¿El planteamiento del problema y la tentativa solución descrita son claros?',
-    7 => 'Justificación. ¿Sus contribuciones o beneficios están completamente justificados?',
-    8 => 'Resultados o productos esperados. ¿Su viabilidad es adecuada?',
-    9 => 'Metodología. ¿La propuesta metodológica es pertinente?',
-    10 => 'Cronograma. ¿El calendario de actividades por estudiante es adecuado?',
-];
+$preguntas = preguntasEvaluacionProtocolo();
 
 $fechaEvaluacion = date('Y-m-d');
 
@@ -93,12 +81,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $dictamen = trim($_POST['dictamen'] ?? '');
     $observaciones = trim($_POST['observaciones'] ?? '');
+    $respuestas = is_array($_POST['preguntas'] ?? null) ? $_POST['preguntas'] : [];
     $fechaEvaluacion = trim($_POST['fecha_evaluacion'] ?? date('Y-m-d'));
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaEvaluacion)) {
         $fechaEvaluacion = date('Y-m-d');
     }
 
-    $resultado = guardarDictamen($db, $formatoId, $sinodalId, $dictamen, $observaciones, $fechaEvaluacion);
+    $resultado = guardarDictamen($db, $formatoId, $sinodalId, $dictamen, $observaciones, $fechaEvaluacion, $respuestas);
     if (!$resultado['ok']) {
         flash('error', $resultado['mensaje']);
         redirect('evaluarProtocolo.php?formato=' . $formatoId);
@@ -156,8 +145,8 @@ require __DIR__ . '/../app/views/header.php';
                         <?php foreach ($preguntas as $num => $texto): ?>
                         <tr>
                             <td><label><?= e($texto) ?></label></td>
-                            <td class="dictamen-op"><input type="radio" name="preguntas[<?= $num ?>][respuesta]" value="SI"></td>
-                            <td class="dictamen-op"><input type="radio" name="preguntas[<?= $num ?>][respuesta]" value="NO"></td>
+                            <td class="dictamen-op"><input type="radio" name="preguntas[<?= $num ?>][respuesta]" value="SI" required></td>
+                            <td class="dictamen-op"><input type="radio" name="preguntas[<?= $num ?>][respuesta]" value="NO" required></td>
                             <td><input type="text" name="preguntas[<?= $num ?>][observaciones]" class="dictamen-obs"></td>
                         </tr>
                         <?php endforeach; ?>

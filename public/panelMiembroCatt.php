@@ -253,6 +253,7 @@ if ($modal === 'numero_tt') {
         $protocolosListosTT[] = $pendiente;
     }
 }
+$protocolosConDictamenes = protocolosRevisados($db);
 
 $query = database()->prepare("SELECT c.fecha, c.fecha_fin, c.actividad, c.descripcion FROM calendario c WHERE COALESCE(c.fecha_fin, c.fecha) >= CURRENT_DATE AND (c.tipo_tt IS NULL OR EXISTS (SELECT 1 FROM calendario_participante cp WHERE cp.calendario_id = c.id AND cp.UserId = ?)) ORDER BY c.fecha ASC LIMIT 3");
 $query->execute([$user['id']]);
@@ -305,6 +306,24 @@ $protocolosPendientesCount = (int) database()->query("SELECT COUNT(*) FROM Forma
                 </div>
                 <a class="card-list-link" href="panelMiembroCatt.php?modal=revisiones&amp;tipo=trabajo-terminal-ii">Ver lista</a>
             </article>
+        </section>
+
+        <section class="dashboard-panel">
+            <div class="panel-header"><h2>Dictámenes de protocolos</h2><span><?= count($protocolosConDictamenes) ?></span></div>
+            <div class="activity-summary">
+                <?php if (!$protocolosConDictamenes): ?>
+                    <p>Aún no hay dictámenes de sinodales registrados.</p>
+                <?php else: foreach ($protocolosConDictamenes as $protocoloEvaluado): ?>
+                    <article class="summary-item">
+                        <span class="summary-date">TT</span>
+                        <div>
+                            <strong><?= e($protocoloEvaluado['TituloProtocolo']) ?></strong>
+                            <small>Equipo #<?= (int) $protocoloEvaluado['EquipoId'] ?> · <?= e(etiquetaEstadoProtocolo((string) $protocoloEvaluado['Status'])) ?></small>
+                            <a class="protocol-doc-link" href="verEvaluacionProtocolo.php?formato=<?= (int) $protocoloEvaluado['FormatoId'] ?>">Consultar respuestas y dictámenes</a>
+                        </div>
+                    </article>
+                <?php endforeach; endif; ?>
+            </div>
         </section>
 
         <section class="dashboard-panel">

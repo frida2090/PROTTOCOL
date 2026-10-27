@@ -43,6 +43,10 @@ Las instalaciones nuevas incluyen una cuenta de administrador de ejemplo: `admin
 
 Los miembros de la CATT asignan equipos desde su panel (**Asignar equipos TT**): estudiantes sin equipo, exactamente dos directores, tres sinodales y un profesor de seguimiento. El representante del equipo es el primer estudiante en orden alfabético y se guarda en `Equipo_TT.RepresentanteUserId`; las asignaciones docentes se guardan en `Equipo_Asignacion`. Los estudiantes ven su equipo y docentes, y cada docente ve sus equipos (máximo 8). En una base existente, `php database/sembrar_demo_catt.php` aplica `database/migrations/20261006_asignacion_equipos_tt.sql` si hace falta e inyecta cuentas de demostración (idempotente): sinodales `mariacruz@ipn.mx`, `consuelogarcia@ipn.mx` y `jessieguzman@ipn.mx` (contraseña `Sinodal123`), alumnos `fcarmonaj@alumno.ipn.mx`, `oredondog@alumno.ipn.mx` y `gzaragozag@alumno.ipn.mx` (`Alumno123`) y el miembro CATT `catt@ipn.mx` (`Catt12345`). Las boletas son ficticias; cambia estas contraseñas fuera de un entorno de pruebas.
 
+### Evaluación de protocolos
+
+Las respuestas Sí/No y las observaciones por pregunta del formulario de evaluación se guardan en `Sinodal_Evaluacion_Detalle`, relacionadas con el dictamen general del sinodal en `Sinodal_Evaluacion`. En una instalación nueva la tabla se crea al importar `database/PROTTOCOL.sql`; en una base existente, aplica una sola vez `database/migrations/20261009_respuestas_evaluacion_protocolo.sql` después de las migraciones anteriores. Los alumnos, sinodales, miembros CATT y administradores autorizados pueden consultar los dictámenes y el estado/observaciones de la revisión CATT desde la vista del protocolo. Las evaluaciones previas a esta migración conservan su dictamen general, pero no tienen respuestas individuales para mostrar.
+
 ## Estructura
 
 - `app/`: helpers, sesión y componentes compartidos.

@@ -4,6 +4,22 @@ declare(strict_types=1);
 const MAX_ARCHIVO_PROTOCOLO_BYTES = 10485760; // 10 MB
 const MAX_ENTREGAS_PROTOCOLO = 2; // 1a y 2a entrega ante dictamen de sinodales
 
+function preguntasEvaluacionProtocolo(): array
+{
+    return [
+        1 => 'Título del TT. ¿El título corresponde al producto esperado?',
+        2 => 'Resumen. ¿El resumen expresa claramente la propuesta del TT, su importancia y aplicación?',
+        3 => 'Palabras clave. ¿Las palabras clave han sido clasificadas adecuadamente?',
+        4 => 'Introducción. ¿La presentación del problema a resolver es comprensible?',
+        5 => 'Objetivo. ¿El objetivo es preciso y relevante?',
+        6 => 'Planteamiento. ¿El planteamiento del problema y la tentativa solución descrita son claros?',
+        7 => 'Justificación. ¿Sus contribuciones o beneficios están completamente justificados?',
+        8 => 'Resultados o productos esperados. ¿Su viabilidad es adecuada?',
+        9 => 'Metodología. ¿La propuesta metodológica es pertinente?',
+        10 => 'Cronograma. ¿El calendario de actividades por estudiante es adecuado?',
+    ];
+}
+
 function asegurarCatalogoProtocolo(PDO $db): int
 {
     $existe = $db->prepare("SELECT TipoFormatoId FROM Catalogo_Formatos WHERE Clave = 'Protocolo'");
@@ -21,7 +37,8 @@ function asegurarCatalogoProtocolo(PDO $db): int
 function protocoloDelEquipo(PDO $db, int $equipoId): ?array
 {
     $query = $db->prepare(
-        'SELECT fs.FormatoId, fs.EquipoId, fs.Status, fs.FechaSubida, fs.Observaciones, fs.UserId AS RevisorUserId, fs.FechaRevision, cf.Nombre AS TipoFormato '
+        'SELECT fs.FormatoId, fs.EquipoId, fs.Status, fs.FechaSubida, fs.Observaciones, fs.UserId AS RevisorUserId, fs.FechaRevision, cf.Nombre AS TipoFormato, '
+        . '(SELECT COUNT(*) FROM Sinodal_Evaluacion se WHERE se.FormatoId = fs.FormatoId) AS TotalEvaluaciones '
         . 'FROM Formatos_Subidos fs JOIN Catalogo_Formatos cf ON cf.TipoFormatoId = fs.TipoFormatoId '
         . 'WHERE fs.EquipoId = ? ORDER BY fs.FormatoId DESC LIMIT 1'
     );
@@ -122,18 +139,32 @@ function sinodalesElegiblesParaEquipo(PDO $db, int $equipoId): array
 }
 
 // Evaluaciones de sinodales de un formato (dictamen, observaciones, fecha).
+function agregarRespuestasEvaluaciones(PDO $db, array $evaluaciones): array
+{
+    $respuestas = $db->prepare('SELECT NumeroPregunta, Respuesta, Observaciones FROM Sinodal_Evaluacion_Detalle WHERE EvalId = ? ORDER BY NumeroPregunta');
+    foreach ($evaluaciones as &$evaluacion) {
+        $respuestas->execute([(int) $evaluacion['EvalId']]);
+        $evaluacion['Respuestas'] = $respuestas->fetchAll();
+    }
+    unset($evaluacion);
+    return $evaluaciones;
+}
+
 function evaluacionesDeFormato(PDO $db, int $formatoId): array
 {
     $query = $db->prepare(
         'SELECT se.EvalId, se.FormatoId, se.UserId, se.Dictamen, se.Observaciones, se.FechaRevision, '
-        . 'u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno '
+        . 'u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno, u.Email, em.NumeroEmpleado, ad.Nombre AS DeptNombre, ac.Nombre AS AcadNombre '
         . 'FROM Sinodal_Evaluacion se '
         . 'JOIN Usuarios u ON u.UserId = se.UserId '
+        . 'LEFT JOIN Empleado em ON em.UserId = u.UserId '
+        . 'LEFT JOIN Academia_Departamento ad ON ad.DeptId = em.DeptId '
+        . 'LEFT JOIN Academia ac ON ac.AcadId = ad.AcadId '
         . 'WHERE se.FormatoId = ? '
         . 'ORDER BY se.FechaRevision ASC, se.EvalId ASC'
     );
     $query->execute([$formatoId]);
-    return $query->fetchAll();
+    return agregarRespuestasEvaluaciones($db, $query->fetchAll());
 }
 
 // Evaluaciones de todos los formatos de un equipo (por version).
@@ -149,6 +180,19 @@ function evaluacionesDeEquipo(PDO $db, int $equipoId): array
         . 'ORDER BY se.FormatoId ASC, se.FechaRevision ASC, se.EvalId ASC'
     );
     $query->execute([$equipoId]);
+    return agregarRespuestasEvaluaciones($db, $query->fetchAll());
+}
+
+function protocolosRevisados(PDO $db): array
+{
+    $query = $db->query(
+        'SELECT DISTINCT fs.FormatoId, fs.EquipoId, fs.Status, fs.FechaSubida, et.TituloProtocolo '
+        . 'FROM Formatos_Subidos fs '
+        . "JOIN Catalogo_Formatos cf ON cf.TipoFormatoId = fs.TipoFormatoId AND cf.Clave = 'Protocolo' "
+        . 'JOIN Equipo_TT et ON et.EquipoId = fs.EquipoId '
+        . "WHERE fs.Status <> 'Pendiente' "
+        . 'ORDER BY fs.FechaSubida DESC, fs.FormatoId DESC'
+    );
     return $query->fetchAll();
 }
 
@@ -194,11 +238,25 @@ function pendientesEvaluacionParaSinodal(PDO $db, int $userId): array
 // Guarda el dictamen de un sinodal sobre el formato vigente de un equipo y
 // recalcula el estado del formato. Devuelve un array con el resultado:
 //   ['ok' => bool, 'mensaje' => string, 'baja' => bool, 'estado' => string]
-function guardarDictamen(PDO $db, int $formatoId, int $sinodalId, string $dictamen, string $observaciones, string $fechaRevision): array
+function guardarDictamen(PDO $db, int $formatoId, int $sinodalId, string $dictamen, string $observaciones, string $fechaRevision, array $preguntas): array
 {
     $dictamen = strtolower(trim($dictamen));
     if (!in_array($dictamen, ['aprobado', 'rechazado'], true)) {
         return ['ok' => false, 'mensaje' => 'Selecciona un dictamen valido (aprobado o rechazado).', 'baja' => false, 'estado' => ''];
+    }
+    $preguntasEsperadas = preguntasEvaluacionProtocolo();
+    if (count($preguntas) !== count($preguntasEsperadas)) {
+        return ['ok' => false, 'mensaje' => 'Responde las diez preguntas del formulario antes de enviar el dictamen.', 'baja' => false, 'estado' => ''];
+    }
+    foreach ($preguntasEsperadas as $numero => $_texto) {
+        $respuesta = $preguntas[$numero] ?? null;
+        if (
+            !is_array($respuesta)
+            || !in_array($respuesta['respuesta'] ?? null, ['SI', 'NO'], true)
+            || (isset($respuesta['observaciones']) && !is_string($respuesta['observaciones']))
+        ) {
+            return ['ok' => false, 'mensaje' => 'Responde las diez preguntas del formulario antes de enviar el dictamen.', 'baja' => false, 'estado' => ''];
+        }
     }
 
     try {
@@ -230,6 +288,18 @@ function guardarDictamen(PDO $db, int $formatoId, int $sinodalId, string $dictam
 
         $db->prepare('INSERT INTO Sinodal_Evaluacion (FormatoId, UserId, Dictamen, Observaciones, FechaRevision) VALUES (?, ?, ?, ?, ?)')
             ->execute([$formatoId, $sinodalId, $dictamen, $observaciones !== '' ? $observaciones : null, $fechaRevision]);
+        $evalId = (int) $db->lastInsertId();
+        $insertRespuesta = $db->prepare('INSERT INTO Sinodal_Evaluacion_Detalle (EvalId, NumeroPregunta, Respuesta, Observaciones) VALUES (?, ?, ?, ?)');
+        foreach ($preguntasEsperadas as $numero => $_texto) {
+            $respuesta = $preguntas[$numero];
+            $observacionPregunta = trim($respuesta['observaciones'] ?? '');
+            $insertRespuesta->execute([
+                $evalId,
+                $numero,
+                $respuesta['respuesta'],
+                $observacionPregunta !== '' ? $observacionPregunta : null,
+            ]);
+        }
 
         // Version vigente: cuenta de entregas de sinodales (v1, v2).
         $versionQuery = $db->prepare(

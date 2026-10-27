@@ -296,6 +296,17 @@ CREATE TABLE Sinodal_Evaluacion(
         ON DELETE RESTRICT 
 );
 
+CREATE TABLE Sinodal_Evaluacion_Detalle(
+    EvalId INT UNSIGNED NOT NULL,
+    NumeroPregunta TINYINT UNSIGNED NOT NULL,
+    Respuesta ENUM('SI', 'NO') NOT NULL,
+    Observaciones TEXT NULL,
+    PRIMARY KEY (EvalId, NumeroPregunta),
+    CONSTRAINT fk_sed_evaluacion FOREIGN KEY (EvalId) REFERENCES Sinodal_Evaluacion(EvalId)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
 CREATE TABLE calendario (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     fecha DATE NOT NULL,
@@ -371,5 +382,4 @@ FROM (
   UNION ALL SELECT '2027-02-15', NULL, 'Entrega de dictámenes reestructurados (TTR)', NULL
 ) datos
 JOIN Usuarios u ON u.Email = 'profesor@catt.local';
-
 
