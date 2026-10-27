@@ -41,7 +41,8 @@ if (!puedeVerFormato($db, $user, $formato)) {
 }
 
 $equipo = equipoPorId($db, (int) $formato['EquipoId']);
-$evaluaciones = evaluacionesDeFormato($db, $formatoId);
+$esAlumno = $user['rol'] === 'estudiante';
+$evaluaciones = evaluacionesDeFormato($db, $formatoId, !$esAlumno);
 $versionQuery = $db->prepare(
     'SELECT COUNT(*) FROM Formatos_Subidos fs '
     . "JOIN Catalogo_Formatos cf ON cf.TipoFormatoId = fs.TipoFormatoId AND cf.Clave = 'Protocolo' "
@@ -97,9 +98,11 @@ require __DIR__ . '/../app/views/header.php';
                 <div><dt>Estado actual</dt><dd><?= e(etiquetaEstadoProtocolo((string) $formato['Status'])) ?></dd></div>
                 <div><dt>Enviado</dt><dd><?= e(date('d/m/Y', strtotime((string) $formato['FechaSubida']))) ?></dd></div>
                 <div><dt>Dictamen CATT</dt><dd><?= e($dictamenCatt) ?></dd></div>
-                <div><dt>Revisó CATT</dt><dd><?= e($revisorCatt !== '' ? $revisorCatt : '—') ?></dd></div>
-                <div><dt>Contacto CATT</dt><dd><?= e((string) ($formato['RevisorCorreo'] ?? '—')) ?></dd></div>
-                <div><dt>Número de empleado CATT</dt><dd><?= e((string) ($formato['RevisorNumeroEmpleado'] ?? '—')) ?></dd></div>
+                <?php if (!$esAlumno): ?>
+                    <div><dt>Revisó CATT</dt><dd><?= e($revisorCatt !== '' ? $revisorCatt : '—') ?></dd></div>
+                    <div><dt>Contacto CATT</dt><dd><?= e((string) ($formato['RevisorCorreo'] ?? '—')) ?></dd></div>
+                    <div><dt>Número de empleado CATT</dt><dd><?= e((string) ($formato['RevisorNumeroEmpleado'] ?? '—')) ?></dd></div>
+                <?php endif; ?>
                 <div><dt>Fecha de revisión CATT</dt><dd><?= !empty($formato['FechaRevision']) ? e(date('d/m/Y', strtotime((string) $formato['FechaRevision']))) : '—' ?></dd></div>
             </dl>
             <?php if ($formato['Status'] === 'Rechazado' && !empty($formato['Observaciones'])): ?>
@@ -123,6 +126,21 @@ require __DIR__ . '/../app/views/header.php';
             <div class="panel-header"><h2>Evaluaciones de sinodales</h2><span><?= count($evaluaciones) ?></span></div>
             <?php if (!$evaluaciones): ?>
                 <p>Este protocolo todavía no tiene dictámenes de sinodales.</p>
+            <?php elseif ($esAlumno): ?>
+                <?php foreach ($evaluaciones as $evaluacion): ?>
+                    <article class="protocol-pending">
+                        <header class="protocol-pending-head">
+                            <strong>Dictamen de la comisión de sinodales</strong>
+                            <span class="status-chip status-chip--<?= $evaluacion['Dictamen'] === 'aprobado' ? 'aprobado' : 'rechazado' ?>"><?= e(strtoupper((string) $evaluacion['Dictamen'])) ?></span>
+                        </header>
+                        <?php if (!empty($evaluacion['Observaciones'])): ?>
+                            <div class="observaciones-box">
+                                <strong>Recomendaciones adicionales</strong>
+                                <p><?= nl2br(e((string) $evaluacion['Observaciones'])) ?></p>
+                            </div>
+                        <?php endif; ?>
+                    </article>
+                <?php endforeach; ?>
             <?php else: ?>
                 <?php foreach ($evaluaciones as $evaluacion): ?>
                     <article class="protocol-pending">

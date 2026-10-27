@@ -13,8 +13,8 @@ function preguntasEvaluacionProtocolo(): array
         4 => 'Introducción. ¿La presentación del problema a resolver es comprensible?',
         5 => 'Objetivo. ¿El objetivo es preciso y relevante?',
         6 => 'Planteamiento. ¿El planteamiento del problema y la tentativa solución descrita son claros?',
-        7 => 'Justificación. ¿Sus contribuciones o beneficios están completamente justificados?',
-        8 => 'Resultados o productos esperados. ¿Su viabilidad es adecuada?',
+        7 => 'Justificación. ¿Sus contribuciones o beneficios están completamente justificados? Originalidad, vinculación con población usuaria potencial, utilidad de los resultados, complejidad en su elaboración a nivel ingeniería, mejoramiento de lo existente, etc.',
+        8 => 'Resultados o productos esperados. ¿Su viabilidad es adecuada? Tiempos, recursos humanos y materiales, alcances, costos y otros puntos que puedan impedir la culminación exitosa del trabajo.',
         9 => 'Metodología. ¿La propuesta metodológica es pertinente?',
         10 => 'Cronograma. ¿El calendario de actividades por estudiante es adecuado?',
     ];
@@ -150,7 +150,7 @@ function agregarRespuestasEvaluaciones(PDO $db, array $evaluaciones): array
     return $evaluaciones;
 }
 
-function evaluacionesDeFormato(PDO $db, int $formatoId): array
+function evaluacionesDeFormato(PDO $db, int $formatoId, bool $incluirRespuestas = true): array
 {
     $query = $db->prepare(
         'SELECT se.EvalId, se.FormatoId, se.UserId, se.Dictamen, se.Observaciones, se.FechaRevision, '
@@ -164,7 +164,8 @@ function evaluacionesDeFormato(PDO $db, int $formatoId): array
         . 'ORDER BY se.FechaRevision ASC, se.EvalId ASC'
     );
     $query->execute([$formatoId]);
-    return agregarRespuestasEvaluaciones($db, $query->fetchAll());
+    $evaluaciones = $query->fetchAll();
+    return $incluirRespuestas ? agregarRespuestasEvaluaciones($db, $evaluaciones) : $evaluaciones;
 }
 
 // Evaluaciones de todos los formatos de un equipo (por version).

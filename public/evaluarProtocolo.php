@@ -136,8 +136,8 @@ require __DIR__ . '/../app/views/header.php';
                     <thead>
                         <tr>
                             <th>Pregunta</th>
-                            <th>Sí</th>
-                            <th>No</th>
+                            <th>SI</th>
+                            <th>NO</th>
                             <th>Observaciones</th>
                         </tr>
                     </thead>
@@ -147,7 +147,7 @@ require __DIR__ . '/../app/views/header.php';
                             <td><label><?= e($texto) ?></label></td>
                             <td class="dictamen-op"><input type="radio" name="preguntas[<?= $num ?>][respuesta]" value="SI" required></td>
                             <td class="dictamen-op"><input type="radio" name="preguntas[<?= $num ?>][respuesta]" value="NO" required></td>
-                            <td><input type="text" name="preguntas[<?= $num ?>][observaciones]" class="dictamen-obs"></td>
+                            <td><textarea name="preguntas[<?= $num ?>][observaciones]" class="dictamen-obs" rows="2"></textarea></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -159,7 +159,7 @@ require __DIR__ . '/../app/views/header.php';
                     <label class="radio-inline"><input type="radio" name="dictamen" value="rechazado" required> No aprobado</label>
                 </fieldset>
 
-                <label for="observaciones">Observaciones / recomendaciones adicionales</label>
+                <label for="observaciones">RECOMENDACIONES ADICIONALES</label>
                 <textarea id="observaciones" name="observaciones" rows="4" placeholder="Comentarios generales y recomendaciones para el alumno"></textarea>
 
                 <label for="fecha_evaluacion">Fecha de evaluación</label>
