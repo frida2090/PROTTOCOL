@@ -95,6 +95,28 @@ input:focus, select:focus, textarea:focus { border-color: var(--wine); outline: 
 .formulario1-review-actions .button { margin: 0; }
 .formulario1-list ul { display: grid; gap: 12px; list-style: none; margin: 18px 0 0; padding: 0; }
 .formulario1-list li { align-items: center; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px 0; }
+.acuse-page, .seguimiento-page { display: grid; gap: 24px; max-width: 1000px; }
+.acuse-page .form-heading, .seguimiento-page .form-heading { margin-bottom: 0; }
+.acuse-page .form-panel, .seguimiento-page .form-panel { max-width: none; }
+.seguimiento-students { border-bottom: 1px solid var(--line); color: var(--muted); margin: 20px 0; padding-bottom: 18px; }
+.seguimiento-general-form { margin: 18px 0 30px; }
+.seguimiento-export-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 24px 0; }
+.seguimiento-export-actions .button { margin: 0; }
+.seguimiento-sessions { display: grid; gap: 16px; margin-top: 16px; }
+.seguimiento-session { border: 1px solid var(--line); padding: 20px; }
+.seguimiento-session > header { align-items: center; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; padding-bottom: 12px; }
+.seguimiento-session h4 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.15rem; margin: 0; }
+.seguimiento-session header small { color: var(--muted); }
+.seguimiento-session h5 { margin: 22px 0 8px; }
+.seguimiento-attendance { list-style: none; margin: 0; padding: 0; }
+.seguimiento-attendance > li { align-items: center; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px 0; }
+.seguimiento-attendance .formulario1-sign-upload { flex: 1 1 100%; }
+@media print {
+    .site-header, .site-footer, .form-heading, .seguimiento-general-form, .seguimiento-export-actions, .formulario1-sign-upload, .alert, button { display: none !important; }
+    .page-shell { max-width: none; padding: 0; }
+    .form-panel { box-shadow: none; padding: 12px; }
+    .seguimiento-page { max-width: none; }
+}
 @media (max-width: 720px) {
     .formulario1-type-form { grid-template-columns: 1fr; }
     .formulario1-signers > li { grid-template-columns: 1fr; }

@@ -13,6 +13,10 @@ $userPanelUrl = $user ? match ($user['rol']) {
     : 'calendario.php';
 $rolesFormulario1 = ['estudiante', 'director', 'sinodal', 'profesor_seguimiento', 'miembroCatt', 'jefeAcademia'];
 $puedeUsarFormulario1 = $user && array_intersect($user['roles'] ?? [], $rolesFormulario1);
+$rolesAcuse = ['estudiante', 'director', 'sinodal', 'profesor_seguimiento', 'miembroCatt', 'jefeAcademia'];
+$puedeUsarAcuse = $user && array_intersect($user['roles'] ?? [], $rolesAcuse);
+$rolesSeguimiento = ['estudiante', 'profesor_seguimiento', 'miembroCatt', 'jefeAcademia'];
+$puedeUsarSeguimiento = $user && array_intersect($user['roles'] ?? [], $rolesSeguimiento);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -35,6 +39,8 @@ $puedeUsarFormulario1 = $user && array_intersect($user['roles'] ?? [], $rolesFor
         <?php if ($user): ?>
             <a href="calendario.php">Calendario</a>
             <?php if ($puedeUsarFormulario1): ?><a href="formulario1.php">Formulario 1</a><?php endif; ?>
+            <?php if ($puedeUsarAcuse): ?><a href="acuseReporteTecnico.php">Acuse final</a><?php endif; ?>
+            <?php if ($puedeUsarSeguimiento): ?><a href="seguimientoTT.php">Seguimiento TT</a><?php endif; ?>
             <a href="directorio.php">Directorio académico</a>
             <a class="user-chip" href="<?= e($userPanelUrl) ?>" title="Abrir mi panel"><?= e(fullName($user)) ?></a>
             <a class="nav-logout" href="logout.php">Salir</a>

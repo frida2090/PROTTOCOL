@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/pdf.php';
 
 const FORMULARIO1_MAX_FIRMA_BYTES = 1048576;
 
@@ -161,34 +161,8 @@ function formulario1SubirFirma(PDO $db, int $formularioId, array $user, string $
     if (!in_array($rol, $rolesPermitidos, true) || !in_array($rol, $user['roles'] ?? [], true)) {
         throw new DomainException('No tienes el rol requerido para subir esta firma.');
     }
-    $errorArchivo = (int) ($archivo['error'] ?? UPLOAD_ERR_NO_FILE);
-    if ($errorArchivo === UPLOAD_ERR_NO_FILE) {
-        throw new DomainException('Selecciona el archivo PDF de tu firma.');
-    }
-    if (in_array($errorArchivo, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
-        throw new DomainException('El PDF de firma no puede superar 1 MB.');
-    }
-    if ($errorArchivo !== UPLOAD_ERR_OK
-        || !is_string($archivo['tmp_name'] ?? null)
-        || !is_string($archivo['name'] ?? null)
-        || !is_uploaded_file($archivo['tmp_name'])) {
-        throw new DomainException('No fue posible recibir el archivo PDF de firma.');
-    }
-
-    $nombre = $archivo['name'];
-    $rutaTemporal = $archivo['tmp_name'];
-    formulario1ValidarArchivoFirma($rutaTemporal, $nombre);
-
-    $directorio = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'formulario1_firmas';
-    if (!is_dir($directorio) && !mkdir($directorio, 0750, true) && !is_dir($directorio)) {
-        throw new RuntimeException('No fue posible preparar el almacenamiento privado de firmas.');
-    }
-    $nombreGuardado = bin2hex(random_bytes(24)) . '.pdf';
-    $rutaAbsoluta = $directorio . DIRECTORY_SEPARATOR . $nombreGuardado;
-    $rutaRelativa = 'storage/formulario1_firmas/' . $nombreGuardado;
-    if (!move_uploaded_file($rutaTemporal, $rutaAbsoluta)) {
-        throw new RuntimeException('No fue posible guardar el PDF de firma.');
-    }
+    $rutaRelativa = guardarPdfFirmado($archivo, 'formulario1_firmas', FORMULARIO1_MAX_FIRMA_BYTES);
+    $rutaAbsoluta = rutaPdfFirmado($rutaRelativa, 'formulario1_firmas');
 
     try {
         $db->beginTransaction();
@@ -224,31 +198,6 @@ function formulario1SubirFirma(PDO $db, int $formularioId, array $user, string $
             throw new RuntimeException('No fue posible limpiar el PDF tras cancelar la carga.', 0, $exception);
         }
         throw $exception;
-    }
-}
-
-function formulario1ValidarArchivoFirma(string $rutaTemporal, string $nombre): void
-{
-    $extension = strtolower(pathinfo($nombre, PATHINFO_EXTENSION));
-    $tamano = filesize($rutaTemporal);
-    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-    $mime = $finfo ? (string) finfo_file($finfo, $rutaTemporal) : '';
-    if ($finfo) {
-        finfo_close($finfo);
-    }
-    if ($extension !== 'pdf' || $mime !== 'application/pdf') {
-        throw new DomainException('La firma debe estar en formato PDF.');
-    }
-    if ($tamano === false || $tamano > FORMULARIO1_MAX_FIRMA_BYTES) {
-        throw new DomainException('El PDF de firma no puede superar 1 MB.');
-    }
-    try {
-        $paginas = (new \setasign\Fpdi\Fpdi())->setSourceFile($rutaTemporal);
-    } catch (Throwable $exception) {
-        throw new DomainException('El archivo de firma no es un PDF válido o legible.', 0, $exception);
-    }
-    if ($paginas < 1) {
-        throw new DomainException('El archivo PDF de firma no contiene páginas legibles.');
     }
 }
 
@@ -404,24 +353,12 @@ function formulario1FechaDisponible(?string $fechaPresentacion, ?DateTimeImmutab
 
 function formulario1RutaFirma(string $rutaRelativa): string
 {
-    if (!str_starts_with($rutaRelativa, 'storage/formulario1_firmas/') || str_contains($rutaRelativa, '..')) {
-        throw new RuntimeException('La ruta de firma guardada no es válida.');
-    }
-    $ruta = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rutaRelativa));
-    $directorio = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'formulario1_firmas');
-    if ($ruta === false || $directorio === false || !str_starts_with($ruta, $directorio . DIRECTORY_SEPARATOR) || !is_file($ruta)) {
-        throw new RuntimeException('No se encontró un archivo de firma requerido.');
-    }
-    return $ruta;
+    return rutaPdfFirmado($rutaRelativa, 'formulario1_firmas');
 }
 
 function formulario1TextoPdf(string $texto): string
 {
-    $convertido = iconv('UTF-8', 'windows-1252//TRANSLIT', $texto);
-    if ($convertido === false) {
-        throw new RuntimeException('No fue posible convertir el texto del formulario para el PDF.');
-    }
-    return $convertido;
+    return pdfTexto($texto);
 }
 
 function formulario1GenerarPdf(array $formulario): string
@@ -478,22 +415,16 @@ function formulario1GenerarPdf(array $formulario): string
     }
 
     foreach ($formulario['firmantes'] as $firmante) {
-        $rutaFirma = formulario1RutaFirma((string) $firmante['RutaArchivo']);
         $nombre = trim(implode(' ', array_filter([
             $firmante['Nombre'],
             $firmante['ApellidoPaterno'],
             $firmante['ApellidoMaterno'],
         ])));
-        $pdf->AddPage();
-        $pdf->SetFont('Arial', 'B', 14);
-        $pdf->MultiCell(0, 8, formulario1TextoPdf(formulario1NombreRol((string) $firmante['Rol']) . ' - ' . $nombre), 0, 'C');
-        $paginas = $pdf->setSourceFile($rutaFirma);
-        for ($pagina = 1; $pagina <= $paginas; $pagina++) {
-            $plantilla = $pdf->importPage($pagina);
-            $tamano = $pdf->getTemplateSize($plantilla);
-            $pdf->AddPage($tamano['orientation'], [$tamano['width'], $tamano['height']]);
-            $pdf->useTemplate($plantilla, 0, 0, $tamano['width'], $tamano['height']);
-        }
+        pdfAnexarFirmado(
+            $pdf,
+            formulario1RutaFirma((string) $firmante['RutaArchivo']),
+            formulario1NombreRol((string) $firmante['Rol']) . ' - ' . $nombre
+        );
     }
 
     return $pdf->Output('S');

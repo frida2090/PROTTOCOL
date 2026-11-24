@@ -210,6 +210,99 @@ CREATE TABLE Formulario1_Firma (
         ON DELETE RESTRICT
 );
 
+CREATE TABLE acuses_reporte_tecnico (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tt_id INT UNSIGNED NOT NULL,
+    tipo_tt ENUM('TT-I', 'TT-II', 'TT-R') NOT NULL,
+    fecha_emision DATE NOT NULL,
+    estado ENUM('pendiente_firmas', 'en_revision_catt', 'aprobado', 'rechazado') NOT NULL DEFAULT 'pendiente_firmas',
+    observaciones_catt TEXT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_acuses_reporte_tt_estado (tt_id, estado),
+    CONSTRAINT fk_acuses_reporte_tt
+        FOREIGN KEY (tt_id) REFERENCES TT(TT_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE acuse_entregas (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    acuse_id INT UNSIGNED NOT NULL,
+    usuario_id INT UNSIGNED NOT NULL,
+    rol ENUM('director', 'sinodal', 'profesor_seguimiento') NOT NULL,
+    medio_entrega ENUM('formato_impreso', 'correo_electronico', 'disco_usb', 'otro') NULL,
+    otro_especificar VARCHAR(255) NULL,
+    firma_pdf_path VARCHAR(255) NULL,
+    fecha_firma DATETIME NULL,
+    UNIQUE KEY uq_acuse_entrega_actor (acuse_id, usuario_id, rol),
+    INDEX idx_acuse_entregas_usuario (usuario_id, acuse_id),
+    CONSTRAINT fk_acuse_entregas_acuse
+        FOREIGN KEY (acuse_id) REFERENCES acuses_reporte_tecnico(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_acuse_entregas_usuario
+        FOREIGN KEY (usuario_id) REFERENCES Usuarios(UserId)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE seguimientos_tt (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tt_id INT UNSIGNED NOT NULL UNIQUE,
+    profesor_seguimiento_id INT UNSIGNED NOT NULL,
+    unidad_aprendizaje VARCHAR(200) NOT NULL,
+    grupo VARCHAR(30) NOT NULL,
+    ciclo_escolar VARCHAR(30) NOT NULL,
+    lugar_reunion VARCHAR(200) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_seguimientos_tt_tt
+        FOREIGN KEY (tt_id) REFERENCES TT(TT_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_seguimientos_tt_profesor
+        FOREIGN KEY (profesor_seguimiento_id) REFERENCES Usuarios(UserId)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE seguimiento_sesiones (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    seguimiento_id INT UNSIGNED NOT NULL,
+    numero_sesion SMALLINT UNSIGNED NOT NULL,
+    fecha_hora DATETIME NOT NULL,
+    actividades_programadas TEXT NOT NULL,
+    porcentaje_avance DECIMAL(5, 2) NOT NULL,
+    observaciones TEXT NULL,
+    firma_profesor_pdf_path VARCHAR(255) NULL,
+    asistio_profesor BOOLEAN NOT NULL DEFAULT FALSE,
+    UNIQUE KEY uq_seguimiento_numero_sesion (seguimiento_id, numero_sesion),
+    CONSTRAINT chk_seguimiento_porcentaje
+        CHECK (porcentaje_avance >= 0 AND porcentaje_avance <= 100),
+    CONSTRAINT fk_seguimiento_sesiones_seguimiento
+        FOREIGN KEY (seguimiento_id) REFERENCES seguimientos_tt(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+);
+
+CREATE TABLE seguimiento_asistencias_alumnos (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    sesion_id INT UNSIGNED NOT NULL,
+    alumno_id INT UNSIGNED NOT NULL,
+    asistio BOOLEAN NOT NULL DEFAULT FALSE,
+    firma_alumno_pdf_path VARCHAR(255) NULL,
+    fecha_registro DATETIME NULL,
+    UNIQUE KEY uq_seguimiento_asistencia_alumno (sesion_id, alumno_id),
+    INDEX idx_seguimiento_asistencia_alumno (alumno_id, sesion_id),
+    CONSTRAINT fk_seguimiento_asistencia_sesion
+        FOREIGN KEY (sesion_id) REFERENCES seguimiento_sesiones(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_seguimiento_asistencia_alumno
+        FOREIGN KEY (alumno_id) REFERENCES Usuarios(UserId)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
 CREATE TABLE Externo(
     UserId INT UNSIGNED PRIMARY KEY,
     OrgProcedencia VARCHAR(100) NOT NULL,
