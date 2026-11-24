@@ -139,6 +139,11 @@ function seguimientoGuardarDatos(PDO $db, int $ttId, array $user, array $entrada
     )->execute([$ttId, (int) $user['id'], $unidad, $grupo, $ciclo, $lugar]);
 }
 
+function seguimientoSumaAvanceValida(float $porcentajeExistente, float $porcentajeNuevo): bool
+{
+    return $porcentajeExistente + $porcentajeNuevo <= 100.00001;
+}
+
 function seguimientoGuardarSesion(PDO $db, int $ttId, array $user, array $entrada): void
 {
     if (!in_array('profesor_seguimiento', $user['roles'] ?? [], true)
@@ -195,7 +200,7 @@ function seguimientoGuardarSesion(PDO $db, int $ttId, array $user, array $entrad
             'SELECT COALESCE(SUM(porcentaje_avance), 0) FROM seguimiento_sesiones WHERE seguimiento_id = ? AND numero_sesion <> ?'
         );
         $sumQuery->execute([(int) $seguimientoId, $numero]);
-        if ((float) $sumQuery->fetchColumn() + $porcentaje > 100.00001) {
+        if (!seguimientoSumaAvanceValida((float) $sumQuery->fetchColumn(), $porcentaje)) {
             throw new DomainException('La suma del porcentaje de avance de las sesiones no puede exceder 100%.');
         }
         if ($session) {

@@ -66,7 +66,8 @@ function guardarPdfFirmado(array $archivo, string $subdirectorio, int $maxBytes 
 function convertirFirmaPdfAPng(string $rutaPdfOrigen, string $rutaPngDestino): void
 {
     if (!extension_loaded('imagick')) {
-        throw new DomainException('El servidor no tiene habilitada Imagick, necesaria para convertir la firma PDF a PNG.');
+        convertirFirmaPdfAPngConGhostscript($rutaPdfOrigen, $rutaPngDestino);
+        return;
     }
 
     $imagen = null;
@@ -76,7 +77,9 @@ function convertirFirmaPdfAPng(string $rutaPdfOrigen, string $rutaPngDestino): v
         $imagen->readImage($rutaPdfOrigen . '[0]');
         $imagen->trimImage(0);
         $imagen->setImageFormat('png');
-        if (!$imagen->writeImage($rutaPngDestino)) {
+        if (!$imagen->writeImage($rutaPngDestino)
+            || !is_file($rutaPngDestino)
+            || filesize($rutaPngDestino) <= 0) {
             throw new RuntimeException('No fue posible guardar la firma convertida a PNG.');
         }
     } catch (Throwable $exception) {
@@ -96,6 +99,47 @@ function convertirFirmaPdfAPng(string $rutaPdfOrigen, string $rutaPngDestino): v
                 $imagen->destroy();
             }
         }
+    }
+}
+
+function convertirFirmaPdfAPngConGhostscript(string $rutaPdfOrigen, string $rutaPngDestino): void
+{
+    if (!function_exists('exec')) {
+        throw new DomainException('Ghostscript requiere que la función exec() de PHP esté habilitada.');
+    }
+
+    if (PHP_OS_FAMILY === 'Windows') {
+        $ejecutables = glob('C:\\Program Files\\gs\\*\\bin\\gswin64c.exe');
+        if ($ejecutables === false) {
+            $ejecutables = [];
+        }
+        $ejecutables = array_values(array_filter($ejecutables, 'is_file'));
+        rsort($ejecutables, SORT_NATURAL);
+        if (!$ejecutables) {
+            throw new DomainException('No se encontró Ghostscript en C:\\Program Files\\gs\\*\\bin\\gswin64c.exe.');
+        }
+        $gsBin = $ejecutables[0];
+    } else {
+        $gsBin = 'gs';
+    }
+
+    $comando = escapeshellarg($gsBin)
+        . ' -dSAFER -dBATCH -dNOPAUSE -sDEVICE=png16m -r300 -dFirstPage=1 -dLastPage=1'
+        . ' -sOutputFile=' . escapeshellarg($rutaPngDestino)
+        . ' ' . escapeshellarg($rutaPdfOrigen)
+        . ' 2>&1';
+    $salida = [];
+    $codigoSalida = 0;
+    exec($comando, $salida, $codigoSalida);
+
+    if ($codigoSalida !== 0) {
+        throw new DomainException(
+            'No fue posible convertir el PDF de firma con Ghostscript. Comprueba que no esté dañado ni protegido con contraseña.'
+        );
+    }
+    $tamanoPng = is_file($rutaPngDestino) ? filesize($rutaPngDestino) : false;
+    if ($tamanoPng === false || $tamanoPng <= 0) {
+        throw new DomainException('Ghostscript no generó un archivo PNG válido para la firma.');
     }
 }
 

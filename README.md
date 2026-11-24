@@ -8,7 +8,7 @@ Sistema web que centraliza todo lo que necesitas saber de la CATT en un solo lug
 - MySQL 8.0 o MariaDB 10.5+
 - Composer 2
 - Extensión PDO MySQL habilitada
-- Extensión Imagick de PHP habilitada con soporte para leer PDF
+- Extensión Imagick de PHP con soporte PDF o Ghostscript disponible (instalación en `C:\Program Files\gs\...` en Windows, `gs` en Linux)
 - Python 3.10 o superior y dependencias de `database/requirements-import.txt` para importar el catálogo PDF
 
 ## Instalación
@@ -20,13 +20,21 @@ Sistema web que centraliza todo lo que necesitas saber de la CATT en un solo lug
    - `DB_NAME`
    - `DB_USER`
    - `DB_PASS`
-4. Desde la carpeta `PROTTOCOL`, ejecute:
+4. Desde la carpeta `PROTTOCOL`, aplique las migraciones nuevas de `migrations/`:
+
+```bash
+php migrate.php
+```
+
+El ejecutor registra cada archivo aplicado en la tabla `migraciones` y no vuelve a ejecutarlo. Los scripts históricos de `database/migrations/` no se repiten automáticamente; en instalaciones existentes, aplica primero las migraciones históricas que aún correspondan a tu esquema.
+
+5. Inicie el servidor local:
 
 ```bash
 php -S localhost:8000 -t public
 ```
 
-5. Abra `http://localhost:8000`.
+6. Abra `http://localhost:8000`.
 
 El modelo normalizado permite asignar cada evento de calendario a usuarios junto con uno de sus roles (`estudiante`, `director`, `miembroCatt`, `jefeAcademia`, `sinodal` o `profesor_seguimiento`). La relación valida el rol contra `Usuario_Roles`, por lo que un usuario puede recibir una misma fecha en varios roles. Para una base existente con las tablas anteriores `usuario` y `calendario`, respalde primero la base, renombre `calendario` a `calendario_legacy`, ejecute `database/PROTTOCOL.sql` completo y después ejecute `database/migrations/20261001_migrar_datos_a_PROTTOCOL.sql`. Verifique los datos antes de retirar las tablas antiguas; la migración conserva las cuentas y eventos, asigna `profesor` al rol nuevo `director` y usa un departamento provisional para el empleado heredado.
 
@@ -48,7 +56,7 @@ Los miembros de la CATT asignan equipos desde su panel (**Asignar equipos TT**):
 
 ### Formulario 1 y firmas
 
-Los alumnos con TT clasificado crean solicitudes de actualización. Cada solicitud toma una instantánea de los alumnos, directores, sinodales y profesor de seguimiento asignados al equipo; esos participantes pueden cargar una firma PDF de hasta 1 MB. El servidor conserva el PDF original y genera una imagen PNG de su primera página a 300 DPI, recortada con Imagick; se guardan ambas rutas. Al completar las firmas el estado pasa a revisión CATT. Después de aprobarse, el PDF final (formulario más las páginas originales de las firmas) se habilita al alumno desde siete días antes de `TT.fecha_presentacion`.
+Los alumnos con TT clasificado crean solicitudes de actualización. Cada solicitud toma una instantánea de los alumnos, directores, sinodales y profesor de seguimiento asignados al equipo; esos participantes pueden cargar una firma PDF de hasta 1 MB. El servidor conserva el PDF original y genera una imagen PNG de su primera página a 300 DPI; recorta los márgenes con Imagick o usa Ghostscript si Imagick no está disponible. Se guardan ambas rutas. Al completar las firmas el estado pasa a revisión CATT. Después de aprobarse, el PDF final (formulario más las páginas originales de las firmas) se habilita al alumno desde siete días antes de `TT.fecha_presentacion`.
 
 ### Acuse del reporte técnico y seguimiento de TT
 
@@ -57,6 +65,10 @@ En bases nuevas, `database/PROTTOCOL.sql` incluye las tablas para el Acuse de Re
 ### Evaluación de protocolos
 
 Las respuestas Sí/No y las observaciones por pregunta del formulario de evaluación se guardan en `Sinodal_Evaluacion_Detalle`, relacionadas con el dictamen general del sinodal en `Sinodal_Evaluacion`. En una instalación nueva la tabla se crea al importar `database/PROTTOCOL.sql`; en una base existente, aplica una sola vez `database/migrations/20261009_respuestas_evaluacion_protocolo.sql` después de las migraciones anteriores. Los alumnos, sinodales, miembros CATT y administradores autorizados pueden consultar los dictámenes y el estado/observaciones de la revisión CATT desde la vista del protocolo. Las evaluaciones previas a esta migración conservan su dictamen general, pero no tienen respuestas individuales para mostrar.
+
+## Pruebas
+
+Ejecuta `php tests/run_tests.php` desde la raíz. Las pruebas que usan PDO escriben fixtures únicamente dentro de una transacción y terminan con `rollBack()`; también requieren `DocentesEscom.pdf` y Ghostscript en `C:\Program Files\gs\gs10.08.0\bin\gswin64c.exe`.
 
 ## Estructura
 
