@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $formularioId = (int) ($_POST['formulario_id'] ?? 0);
             $rol = trim((string) ($_POST['rol'] ?? ''));
             formulario1SubirFirma($db, $formularioId, $user, $rol, $_FILES['firma'] ?? []);
-            flash('success', 'Tu firma en PDF fue cargada correctamente.');
+            flash('success', 'Tu firma en PDF fue cargada y procesada correctamente.');
             redirect('formulario1.php?id=' . $formularioId);
         }
         if ($action === 'revisar' && $esCatt) {

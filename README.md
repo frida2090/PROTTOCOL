@@ -8,6 +8,7 @@ Sistema web que centraliza todo lo que necesitas saber de la CATT en un solo lug
 - MySQL 8.0 o MariaDB 10.5+
 - Composer 2
 - Extensión PDO MySQL habilitada
+- Extensión Imagick de PHP habilitada con soporte para leer PDF
 - Python 3.10 o superior y dependencias de `database/requirements-import.txt` para importar el catálogo PDF
 
 ## Instalación
@@ -47,11 +48,11 @@ Los miembros de la CATT asignan equipos desde su panel (**Asignar equipos TT**):
 
 ### Formulario 1 y firmas
 
-Los alumnos con TT clasificado crean solicitudes de actualización. Cada solicitud toma una instantánea de los alumnos, directores, sinodales y profesor de seguimiento asignados al equipo; esos participantes pueden cargar una firma PDF de hasta 1 MB. Al completar las firmas el estado pasa a revisión CATT. Después de aprobarse, el PDF final (formulario más las páginas de las firmas) se habilita al alumno desde siete días antes de `TT.fecha_presentacion`.
+Los alumnos con TT clasificado crean solicitudes de actualización. Cada solicitud toma una instantánea de los alumnos, directores, sinodales y profesor de seguimiento asignados al equipo; esos participantes pueden cargar una firma PDF de hasta 1 MB. El servidor conserva el PDF original y genera una imagen PNG de su primera página a 300 DPI, recortada con Imagick; se guardan ambas rutas. Al completar las firmas el estado pasa a revisión CATT. Después de aprobarse, el PDF final (formulario más las páginas originales de las firmas) se habilita al alumno desde siete días antes de `TT.fecha_presentacion`.
 
 ### Acuse del reporte técnico y seguimiento de TT
 
-En bases nuevas, `database/PROTTOCOL.sql` incluye las tablas para el Acuse de Recibo y los formatos de seguimiento. En bases existentes, después de las migraciones anteriores, ejecuta una sola vez y en orden `database/migrations/20261012_acuses_reporte_tecnico.sql` y `database/migrations/20261013_seguimientos_tt.sql`. El alumno inicia un acuse TT-I/TT-II/TT-R; sus directores, sinodales y profesor de seguimiento asignados indican el medio de recepción y cargan su firma PDF (máximo 1 MB). Tras completar todas las firmas, la CATT puede aprobar o rechazar el acuse. El alumno descarga el PDF aprobado únicamente durante la semana previa a la fecha de presentación, hasta ese día. El profesor de seguimiento asignado configura los datos generales y sesiones del TT, con avance acumulado máximo de 100%; alumnos y profesor registran su asistencia por sesión con firma PDF. Las firmas se guardan bajo `storage/acuses_reporte_tecnico/firmas` y `storage/seguimientos_tt/firmas`, fuera del directorio público. Los PDFs del seguimiento incluyen las sesiones y anexan las firmas cargadas.
+En bases nuevas, `database/PROTTOCOL.sql` incluye las tablas para el Acuse de Recibo y los formatos de seguimiento. En bases existentes, después de las migraciones anteriores, ejecuta una sola vez y en orden `database/migrations/20261012_acuses_reporte_tecnico.sql`, `database/migrations/20261013_seguimientos_tt.sql` y `database/migrations/20261124_firmas_pdf_a_png.sql`. El alumno inicia un acuse TT-I/TT-II/TT-R; sus directores, sinodales y profesor de seguimiento asignados indican el medio de recepción y cargan su firma PDF (máximo 1 MB). Tras completar todas las firmas, la CATT puede aprobar o rechazar el acuse. El alumno descarga el PDF aprobado únicamente durante la semana previa a la fecha de presentación, hasta ese día. El profesor de seguimiento asignado configura los datos generales y sesiones del TT, con avance acumulado máximo de 100%; alumnos y profesor registran su asistencia por sesión con firma PDF. Las cargas conservan el PDF original y guardan la imagen PNG procesada. Las firmas se guardan bajo `storage/acuses_reporte_tecnico/firmas` y `storage/seguimientos_tt/firmas`, fuera del directorio público. Los PDFs del seguimiento incluyen las sesiones y anexan las firmas cargadas.
 
 ### Evaluación de protocolos
 

@@ -161,8 +161,7 @@ function formulario1SubirFirma(PDO $db, int $formularioId, array $user, string $
     if (!in_array($rol, $rolesPermitidos, true) || !in_array($rol, $user['roles'] ?? [], true)) {
         throw new DomainException('No tienes el rol requerido para subir esta firma.');
     }
-    $rutaRelativa = guardarPdfFirmado($archivo, 'formulario1_firmas', FORMULARIO1_MAX_FIRMA_BYTES);
-    $rutaAbsoluta = rutaPdfFirmado($rutaRelativa, 'formulario1_firmas');
+    $rutasFirma = guardarFirmaPdfYConvertirPng($archivo, 'formulario1_firmas', FORMULARIO1_MAX_FIRMA_BYTES);
 
     try {
         $db->beginTransaction();
@@ -182,8 +181,9 @@ function formulario1SubirFirma(PDO $db, int $formularioId, array $user, string $
         if ($signature['RutaArchivo'] !== null) {
             throw new DomainException('Tu firma ya fue cargada para este formulario.');
         }
-        $db->prepare('UPDATE Formulario1_Firma SET RutaArchivo = ?, FechaCarga = CURRENT_TIMESTAMP WHERE FirmaId = ?')
-            ->execute([$rutaRelativa, (int) $signature['FirmaId']]);
+        $db->prepare(
+            'UPDATE Formulario1_Firma SET RutaArchivo = ?, RutaArchivoPng = ?, FechaCarga = CURRENT_TIMESTAMP WHERE FirmaId = ?'
+        )->execute([$rutasFirma['pdf_relativa'], $rutasFirma['png_relativa'], (int) $signature['FirmaId']]);
         $db->prepare(
             "UPDATE Formulario1 SET Estado = 'en_revision_catt' "
             . "WHERE Formulario1Id = ? AND Estado = 'pendiente_firmas' "
@@ -194,8 +194,10 @@ function formulario1SubirFirma(PDO $db, int $formularioId, array $user, string $
         if ($db->inTransaction()) {
             $db->rollBack();
         }
-        if (is_file($rutaAbsoluta) && !unlink($rutaAbsoluta)) {
-            throw new RuntimeException('No fue posible limpiar el PDF tras cancelar la carga.', 0, $exception);
+        foreach ([$rutasFirma['png_absoluta'], $rutasFirma['pdf_absoluta']] as $ruta) {
+            if (is_file($ruta) && !unlink($ruta)) {
+                throw new RuntimeException('No fue posible limpiar los archivos de firma tras cancelar la carga.', 0, $exception);
+            }
         }
         throw $exception;
     }
@@ -213,7 +215,7 @@ function formulario1Detalle(PDO $db, int $formularioId): ?array
         return null;
     }
     $actorsQuery = $db->prepare(
-        'SELECT ff.FirmaId, ff.UserId, ff.Rol, ff.RutaArchivo, ff.FechaCarga, '
+        'SELECT ff.FirmaId, ff.UserId, ff.Rol, ff.RutaArchivo, ff.RutaArchivoPng, ff.FechaCarga, '
         . 'u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno, e.NumeroBoleta '
         . 'FROM Formulario1_Firma ff JOIN Usuarios u ON u.UserId = ff.UserId '
         . 'LEFT JOIN Estudiante e ON e.UserId = ff.UserId '

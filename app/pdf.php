@@ -23,7 +23,7 @@ function validarPdfFirmado(string $rutaTemporal, string $nombre, int $maxBytes =
     try {
         $paginas = (new \setasign\Fpdi\Fpdi())->setSourceFile($rutaTemporal);
     } catch (Throwable $exception) {
-        throw new DomainException('El archivo de firma no es un PDF válido o legible.', 0, $exception);
+        throw new DomainException('El PDF de firma está dañado, protegido con contraseña o no es legible.', 0, $exception);
     }
     if ($paginas < 1) {
         throw new DomainException('El archivo PDF de firma no contiene páginas legibles.');
@@ -61,6 +61,73 @@ function guardarPdfFirmado(array $archivo, string $subdirectorio, int $maxBytes 
         throw new RuntimeException('No fue posible guardar el PDF de firma.');
     }
     return 'storage/' . trim($subdirectorio, '/') . '/' . $nombreGuardado;
+}
+
+function convertirFirmaPdfAPng(string $rutaPdfOrigen, string $rutaPngDestino): void
+{
+    if (!extension_loaded('imagick')) {
+        throw new DomainException('El servidor no tiene habilitada Imagick, necesaria para convertir la firma PDF a PNG.');
+    }
+
+    $imagen = null;
+    try {
+        $imagen = new \Imagick();
+        $imagen->setResolution(300, 300);
+        $imagen->readImage($rutaPdfOrigen . '[0]');
+        $imagen->trimImage(0);
+        $imagen->setImageFormat('png');
+        if (!$imagen->writeImage($rutaPngDestino)) {
+            throw new RuntimeException('No fue posible guardar la firma convertida a PNG.');
+        }
+    } catch (Throwable $exception) {
+        if (is_file($rutaPngDestino) && !unlink($rutaPngDestino)) {
+            throw new RuntimeException('Falló la conversión y no fue posible limpiar el PNG parcial.', 0, $exception);
+        }
+        throw new DomainException(
+            'No fue posible procesar el PDF de firma. Verifica que no esté dañado ni protegido con contraseña e inténtalo de nuevo.',
+            0,
+            $exception
+        );
+    } finally {
+        if ($imagen instanceof \Imagick) {
+            try {
+                $imagen->clear();
+            } finally {
+                $imagen->destroy();
+            }
+        }
+    }
+}
+
+function guardarFirmaPdfYConvertirPng(
+    array $archivo,
+    string $subdirectorio,
+    int $maxBytes = MAX_PDF_FIRMADO_BYTES
+): array {
+    $rutaPdfRelativa = guardarPdfFirmado($archivo, $subdirectorio, $maxBytes);
+    $rutaPngRelativa = substr($rutaPdfRelativa, 0, -4) . '.png';
+    $rutaPdfAbsoluta = null;
+    $rutaPngAbsoluta = null;
+
+    try {
+        $rutaPdfAbsoluta = rutaPdfFirmado($rutaPdfRelativa, $subdirectorio);
+        $rutaPngAbsoluta = dirname($rutaPdfAbsoluta) . DIRECTORY_SEPARATOR . basename($rutaPngRelativa);
+        convertirFirmaPdfAPng($rutaPdfAbsoluta, $rutaPngAbsoluta);
+    } catch (Throwable $exception) {
+        foreach ([$rutaPngAbsoluta, $rutaPdfAbsoluta] as $ruta) {
+            if (is_string($ruta) && is_file($ruta) && !unlink($ruta)) {
+                throw new RuntimeException('No fue posible limpiar los archivos de firma tras cancelar el procesamiento.', 0, $exception);
+            }
+        }
+        throw $exception;
+    }
+
+    return [
+        'pdf_relativa' => $rutaPdfRelativa,
+        'png_relativa' => $rutaPngRelativa,
+        'pdf_absoluta' => $rutaPdfAbsoluta,
+        'png_absoluta' => $rutaPngAbsoluta,
+    ];
 }
 
 function rutaPdfFirmado(string $rutaRelativa, string $subdirectorio): string

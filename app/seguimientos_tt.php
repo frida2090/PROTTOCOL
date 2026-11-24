@@ -236,10 +236,8 @@ function seguimientoSubirFirmaAsistencia(PDO $db, int $sesionId, array $user, ar
         && !in_array('profesor_seguimiento', $user['roles'] ?? [], true)) {
         throw new DomainException('Solo el alumno o el profesor de seguimiento pueden registrar asistencia.');
     }
-    $rutaRelativa = guardarPdfFirmado($archivo, 'seguimientos_tt/firmas');
-    $rutaAbsoluta = '';
+    $rutasFirma = guardarFirmaPdfYConvertirPng($archivo, 'seguimientos_tt/firmas');
     try {
-        $rutaAbsoluta = rutaPdfFirmado($rutaRelativa, 'seguimientos_tt/firmas');
         $db->beginTransaction();
         $query = $db->prepare(
             'SELECT s.id, s.asistio_profesor, s.firma_profesor_pdf_path, st.profesor_seguimiento_id '
@@ -256,8 +254,8 @@ function seguimientoSubirFirmaAsistencia(PDO $db, int $sesionId, array $user, ar
                 throw new DomainException('La asistencia del profesor ya fue firmada para esta sesión.');
             }
             $db->prepare(
-                'UPDATE seguimiento_sesiones SET firma_profesor_pdf_path = ?, asistio_profesor = TRUE WHERE id = ?'
-            )->execute([$rutaRelativa, $sesionId]);
+                'UPDATE seguimiento_sesiones SET firma_profesor_pdf_path = ?, firma_profesor_png_path = ?, asistio_profesor = TRUE WHERE id = ?'
+            )->execute([$rutasFirma['pdf_relativa'], $rutasFirma['png_relativa'], $sesionId]);
         } elseif (in_array('estudiante', $user['roles'] ?? [], true)) {
             $studentQuery = $db->prepare(
                 'SELECT e.UserId FROM seguimiento_sesiones s JOIN seguimientos_tt st ON st.id = s.seguimiento_id '
@@ -278,13 +276,13 @@ function seguimientoSubirFirmaAsistencia(PDO $db, int $sesionId, array $user, ar
             }
             if ($row) {
                 $db->prepare(
-                    'UPDATE seguimiento_asistencias_alumnos SET asistio = TRUE, firma_alumno_pdf_path = ?, fecha_registro = CURRENT_TIMESTAMP WHERE id = ?'
-                )->execute([$rutaRelativa, (int) $row['id']]);
+                    'UPDATE seguimiento_asistencias_alumnos SET asistio = TRUE, firma_alumno_pdf_path = ?, firma_alumno_png_path = ?, fecha_registro = CURRENT_TIMESTAMP WHERE id = ?'
+                )->execute([$rutasFirma['pdf_relativa'], $rutasFirma['png_relativa'], (int) $row['id']]);
             } else {
                 $db->prepare(
-                    'INSERT INTO seguimiento_asistencias_alumnos (sesion_id, alumno_id, asistio, firma_alumno_pdf_path, fecha_registro) '
-                    . 'VALUES (?, ?, TRUE, ?, CURRENT_TIMESTAMP)'
-                )->execute([$sesionId, (int) $user['id'], $rutaRelativa]);
+                    'INSERT INTO seguimiento_asistencias_alumnos (sesion_id, alumno_id, asistio, firma_alumno_pdf_path, firma_alumno_png_path, fecha_registro) '
+                    . 'VALUES (?, ?, TRUE, ?, ?, CURRENT_TIMESTAMP)'
+                )->execute([$sesionId, (int) $user['id'], $rutasFirma['pdf_relativa'], $rutasFirma['png_relativa']]);
             }
         } else {
             throw new DomainException('No tienes permiso para registrar asistencia en esta sesión.');
@@ -294,11 +292,10 @@ function seguimientoSubirFirmaAsistencia(PDO $db, int $sesionId, array $user, ar
         if ($db->inTransaction()) {
             $db->rollBack();
         }
-        if ($rutaAbsoluta === '') {
-            $rutaAbsoluta = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rutaRelativa);
-        }
-        if (is_file($rutaAbsoluta) && !unlink($rutaAbsoluta)) {
-            throw new RuntimeException('No fue posible limpiar el PDF tras cancelar la carga.', 0, $exception);
+        foreach ([$rutasFirma['png_absoluta'], $rutasFirma['pdf_absoluta']] as $ruta) {
+            if (is_file($ruta) && !unlink($ruta)) {
+                throw new RuntimeException('No fue posible limpiar los archivos de firma tras cancelar la carga.', 0, $exception);
+            }
         }
         throw $exception;
     }

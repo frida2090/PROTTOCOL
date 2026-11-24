@@ -109,7 +109,7 @@ function acuseDetalle(PDO $db, int $acuseId): ?array
         return null;
     }
     $entregasQuery = $db->prepare(
-        'SELECT e.id, e.usuario_id, e.rol, e.medio_entrega, e.otro_especificar, e.firma_pdf_path, e.fecha_firma, '
+        'SELECT e.id, e.usuario_id, e.rol, e.medio_entrega, e.otro_especificar, e.firma_pdf_path, e.firma_png_path, e.fecha_firma, '
         . 'u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno '
         . 'FROM acuse_entregas e JOIN Usuarios u ON u.UserId = e.usuario_id '
         . 'WHERE e.acuse_id = ? '
@@ -190,11 +190,9 @@ function acuseGuardarEntrega(PDO $db, int $entregaId, array $user, string $medio
         throw new DomainException('Este acuse ya no está esperando tu firma.');
     }
 
-    $rutaRelativa = guardarPdfFirmado($archivo, 'acuses_reporte_tecnico/firmas');
-    $rutaAbsoluta = '';
-    $db->beginTransaction();
+    $rutasFirma = guardarFirmaPdfYConvertirPng($archivo, 'acuses_reporte_tecnico/firmas');
     try {
-        $rutaAbsoluta = rutaPdfFirmado($rutaRelativa, 'acuses_reporte_tecnico/firmas');
+        $db->beginTransaction();
         $acuseQuery = $db->prepare('SELECT estado FROM acuses_reporte_tecnico WHERE id = ? FOR UPDATE');
         $acuseQuery->execute([(int) $entregaActual['acuse_id']]);
         if ($acuseQuery->fetchColumn() !== 'pendiente_firmas') {
@@ -208,8 +206,14 @@ function acuseGuardarEntrega(PDO $db, int $entregaId, array $user, string $medio
             throw new DomainException('Tu firma ya fue cargada para este acuse.');
         }
         $db->prepare(
-            'UPDATE acuse_entregas SET medio_entrega = ?, otro_especificar = ?, firma_pdf_path = ?, fecha_firma = CURRENT_TIMESTAMP WHERE id = ?'
-        )->execute([$medio, $medio === 'otro' ? $otro : null, $rutaRelativa, $entregaId]);
+            'UPDATE acuse_entregas SET medio_entrega = ?, otro_especificar = ?, firma_pdf_path = ?, firma_png_path = ?, fecha_firma = CURRENT_TIMESTAMP WHERE id = ?'
+        )->execute([
+            $medio,
+            $medio === 'otro' ? $otro : null,
+            $rutasFirma['pdf_relativa'],
+            $rutasFirma['png_relativa'],
+            $entregaId,
+        ]);
         $db->prepare(
             "UPDATE acuses_reporte_tecnico SET estado = 'en_revision_catt' "
             . "WHERE id = ? AND estado = 'pendiente_firmas' "
@@ -220,11 +224,10 @@ function acuseGuardarEntrega(PDO $db, int $entregaId, array $user, string $medio
         if ($db->inTransaction()) {
             $db->rollBack();
         }
-        if ($rutaAbsoluta === '') {
-            $rutaAbsoluta = dirname(__DIR__) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $rutaRelativa);
-        }
-        if (is_file($rutaAbsoluta) && !unlink($rutaAbsoluta)) {
-            throw new RuntimeException('No fue posible limpiar el PDF tras cancelar la carga.', 0, $exception);
+        foreach ([$rutasFirma['png_absoluta'], $rutasFirma['pdf_absoluta']] as $ruta) {
+            if (is_file($ruta) && !unlink($ruta)) {
+                throw new RuntimeException('No fue posible limpiar los archivos de firma tras cancelar la carga.', 0, $exception);
+            }
         }
         throw $exception;
     }
