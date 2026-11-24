@@ -13,13 +13,14 @@ if($user['rol'] !== 'admin') {
     redirect('login.php');
 }
 
-$rolesPermitidos = ['estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin'];
+$rolesPermitidos = ['estudiante', 'director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'profesor_seguimiento', 'admin'];
 $rolLabels = [
     'estudiante' => 'Estudiante',
     'director' => 'Director',
     'miembroCatt' => 'Miembro CATT',
     'jefeAcademia' => 'Jefe de academia',
     'sinodal' => 'Sinodal',
+    'profesor_seguimiento' => 'Profesor de Seguimiento',
     'admin' => 'Administrador',
 ];
 
@@ -42,8 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
         : [];
     $rolesInvalidos = array_diff($roles, $rolesPermitidos);
     $esEstudiante = in_array('estudiante', $roles, true);
-    $esEmpleado = (bool) array_intersect($roles, ['director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'admin']);
-    $esDocente = (bool) array_intersect($roles, ['director', 'sinodal']);
+    $esEmpleado = (bool) array_intersect($roles, ['director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'profesor_seguimiento', 'admin']);
+    $esDocente = (bool) array_intersect($roles, ['director', 'sinodal', 'profesor_seguimiento']);
 
     if ($nombre === '' || $apellidoPaterno === '' || !filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         flash('error', 'Completa todos los datos con un formato válido.');
@@ -52,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
     } elseif (($esEstudiante && ($noBoleta === '' || strlen($noBoleta) > 10)) || ($esEmpleado && ($numeroEmpleado === '' || $departamentoId < 1))) {
         flash('error', 'Completa el identificador y los datos académicos requeridos para el rol seleccionado.');
     } elseif ($docenteCatalogoId > 0 && !$esDocente) {
-        flash('error', 'Para vincular un registro del catálogo, asigna el rol Director o Sinodal.');
+        flash('error', 'Para vincular un registro del catálogo, asigna un rol docente.');
     } elseif (strlen($password) < 8) {
         flash('error', 'La contraseña debe tener al menos 8 caracteres.');
     } elseif ($password !== $confirmPassword) {
@@ -142,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
         $currentRoles = $currentRoleQuery->fetchAll(PDO::FETCH_COLUMN);
         $addingRoles = array_diff($newRoles, $currentRoles);
         $removingRoles = array_diff($currentRoles, $newRoles);
-        $employeeRoles = ['director', 'miembroCatt', 'jefeAcademia', 'sinodal'];
+        $employeeRoles = ['director', 'miembroCatt', 'jefeAcademia', 'sinodal', 'profesor_seguimiento'];
 
         if (in_array('estudiante', $addingRoles, true)) {
             $studentQuery = $connection->prepare('SELECT COUNT(*) FROM Estudiante WHERE UserId = ?');

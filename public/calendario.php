@@ -93,6 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'p
                 foreach ($sinodalIds as $sinodalId) {
                     $participantQuery->execute([$calendarId, $sinodalId, 'sinodal']);
                 }
+                $connection->prepare('UPDATE TT SET TipoTT = ?, fecha_presentacion = ? WHERE EquipoId = ?')
+                    ->execute([$tipoTT, $fecha, $equipoId]);
                 foreach ($cattParticipants as $cattParticipant) {
                     $participantQuery->execute([$calendarId, (int) $cattParticipant['UserId'], $cattParticipant['Rol']]);
                 }

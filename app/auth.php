@@ -31,7 +31,7 @@ function attemptLogin(string $correo, string $password): bool
         return false;
     }
 
-    $rolesQuery = database()->prepare('SELECT Rol FROM Usuario_Roles WHERE UserId = ? ORDER BY FIELD(Rol, \'admin\', \'miembroCatt\', \'jefeAcademia\', \'director\', \'sinodal\', \'estudiante\')');
+    $rolesQuery = database()->prepare('SELECT Rol FROM Usuario_Roles WHERE UserId = ? ORDER BY FIELD(Rol, \'admin\', \'miembroCatt\', \'jefeAcademia\', \'director\', \'sinodal\', \'profesor_seguimiento\', \'estudiante\')');
     $rolesQuery->execute([$user['id']]);
     $roles = $rolesQuery->fetchAll(PDO::FETCH_COLUMN);
     if (!$roles) {
@@ -40,7 +40,7 @@ function attemptLogin(string $correo, string $password): bool
 
     $user['roles'] = $roles;
     $user['rol'] = match ($roles[0]) {
-        'director', 'sinodal' => 'profesor',
+        'director', 'sinodal', 'profesor_seguimiento' => 'profesor',
         'jefeAcademia' => 'miembroCatt',
         default => $roles[0],
     };

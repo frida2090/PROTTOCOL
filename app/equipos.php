@@ -6,6 +6,7 @@ const ETIQUETAS_ROL_EQUIPO = [
     'director' => 'Director',
     'sinodal' => 'Sinodal',
     'seguimiento' => 'Profesor de seguimiento',
+    'profesor_seguimiento' => 'Profesor de seguimiento',
 ];
 
 function claveAlfabetica(array $usuario): string
@@ -81,7 +82,6 @@ function crearEquipoTT(PDO $db, int $asignadorId, string $titulo, string $descri
         if (count($roles) !== count($docentes)) {
             throw new DomainException('Algún docente seleccionado no existe.');
         }
-        $esDocente = static fn (int $id): bool => (bool) array_intersect($roles[$id], ['director', 'sinodal']);
         foreach ($directorIds as $id) {
             if (!in_array('director', $roles[$id], true)) {
                 throw new DomainException('Todos los directores deben tener el rol director.');
@@ -92,8 +92,8 @@ function crearEquipoTT(PDO $db, int $asignadorId, string $titulo, string $descri
                 throw new DomainException('Todos los sinodales deben tener el rol sinodal.');
             }
         }
-        if (!$esDocente($seguimientoId)) {
-            throw new DomainException('El profesor de seguimiento debe ser un docente (director o sinodal).');
+        if (!in_array('profesor_seguimiento', $roles[$seguimientoId], true)) {
+            throw new DomainException('El usuario seleccionado debe tener el rol de profesor de seguimiento.');
         }
 
         $countQuery = $db->prepare('SELECT COUNT(*) FROM EmpleadoEquipo WHERE UserId = ?');
@@ -143,7 +143,7 @@ function integrantesDeEquipo(PDO $db, int $equipoId): array
 
 function docentesDeEquipo(PDO $db, int $equipoId): array
 {
-    $query = $db->prepare("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno, u.Email, COALESCE(ea.Rol, (SELECT GROUP_CONCAT(ur.Rol) FROM Usuario_Roles ur WHERE ur.UserId = u.UserId AND ur.Rol IN ('director', 'sinodal'))) AS Rol FROM EmpleadoEquipo ee JOIN Usuarios u ON u.UserId = ee.UserId LEFT JOIN Equipo_Asignacion ea ON ea.EquipoId = ee.EquipoId AND ea.UserId = ee.UserId WHERE ee.EquipoId = ? ORDER BY FIELD(ea.Rol, 'director', 'sinodal', 'seguimiento'), u.ApellidoPaterno, u.Nombre");
+    $query = $db->prepare("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno, u.Email, COALESCE(ea.Rol, (SELECT GROUP_CONCAT(ur.Rol) FROM Usuario_Roles ur WHERE ur.UserId = u.UserId AND ur.Rol IN ('director', 'sinodal', 'profesor_seguimiento'))) AS Rol FROM EmpleadoEquipo ee JOIN Usuarios u ON u.UserId = ee.UserId LEFT JOIN Equipo_Asignacion ea ON ea.EquipoId = ee.EquipoId AND ea.UserId = ee.UserId WHERE ee.EquipoId = ? ORDER BY FIELD(ea.Rol, 'director', 'sinodal', 'seguimiento'), u.ApellidoPaterno, u.Nombre");
     $query->execute([$equipoId]);
     return $query->fetchAll();
 }
@@ -166,7 +166,7 @@ function equipoDelEstudiante(PDO $db, int $userId): ?array
 
 function equiposDelDocente(PDO $db, int $userId): array
 {
-    $query = $db->prepare("SELECT et.EquipoId, et.TituloProtocolo, et.Descripcion, et.RepresentanteUserId, COALESCE(ea.Rol, (SELECT GROUP_CONCAT(ur.Rol) FROM Usuario_Roles ur WHERE ur.UserId = ee.UserId AND ur.Rol IN ('director', 'sinodal'))) AS MiRol FROM EmpleadoEquipo ee JOIN Equipo_TT et ON et.EquipoId = ee.EquipoId LEFT JOIN Equipo_Asignacion ea ON ea.EquipoId = ee.EquipoId AND ea.UserId = ee.UserId WHERE ee.UserId = ? ORDER BY et.TituloProtocolo");
+    $query = $db->prepare("SELECT et.EquipoId, et.TituloProtocolo, et.Descripcion, et.RepresentanteUserId, COALESCE(ea.Rol, (SELECT GROUP_CONCAT(ur.Rol) FROM Usuario_Roles ur WHERE ur.UserId = ee.UserId AND ur.Rol IN ('director', 'sinodal', 'profesor_seguimiento'))) AS MiRol FROM EmpleadoEquipo ee JOIN Equipo_TT et ON et.EquipoId = ee.EquipoId LEFT JOIN Equipo_Asignacion ea ON ea.EquipoId = ee.EquipoId AND ea.UserId = ee.UserId WHERE ee.UserId = ? ORDER BY et.TituloProtocolo");
     $query->execute([$userId]);
     return array_map(static fn (array $equipo): array => equipoCompleto($db, $equipo), $query->fetchAll());
 }

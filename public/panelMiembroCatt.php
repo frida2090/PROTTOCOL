@@ -192,6 +192,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'e
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'asignar_numero_tt') {
     $equipoId = (int) ($_POST['equipo_id'] ?? 0);
     $numeroTT = trim($_POST['numero_tt'] ?? '');
+    $tipoTT = trim($_POST['tipo_tt'] ?? '');
 
     try {
         if (!csrfValid()) {
@@ -200,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulario'] ?? '') === 'a
         if ($equipoId < 1) {
             throw new DomainException('Selecciona un protocolo válido.');
         }
-        $resultado = asignarNumeroTT(database(), $equipoId, $numeroTT, (int) $user['id']);
+        $resultado = asignarNumeroTT(database(), $equipoId, $numeroTT, $tipoTT, (int) $user['id']);
         if (!$resultado['ok']) {
             throw new DomainException($resultado['mensaje']);
         }
@@ -229,7 +230,7 @@ if ($modal === 'equipos') {
     $estudiantesLibres = $db->query("SELECT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'estudiante' JOIN Estudiante e ON e.UserId = u.UserId WHERE e.EquipoId IS NULL ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
     $directoresDisponibles = $porRol('director');
     $sinodalesDisponibles = $porRol('sinodal');
-    $docentesDisponibles = $db->query("SELECT DISTINCT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol IN ('director', 'sinodal') ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
+    $docentesDisponibles = $db->query("SELECT DISTINCT u.UserId, u.Nombre, u.ApellidoPaterno, u.ApellidoMaterno FROM Usuarios u JOIN Usuario_Roles ur ON ur.UserId = u.UserId AND ur.Rol = 'profesor_seguimiento' ORDER BY u.ApellidoPaterno, u.ApellidoMaterno, u.Nombre")->fetchAll();
     $equiposRegistrados = array_map(
         static fn (array $equipo): array => equipoCompleto($db, $equipo),
         $db->query('SELECT EquipoId, TituloProtocolo, Descripcion, RepresentanteUserId FROM Equipo_TT ORDER BY EquipoId DESC')->fetchAll()
@@ -452,6 +453,8 @@ $protocolosPendientesCount = (int) database()->query("SELECT COUNT(*) FROM Forma
                             <?= csrfField() ?>
                             <input type="hidden" name="formulario" value="asignar_numero_tt">
                             <input type="hidden" name="equipo_id" value="<?= (int) $pendiente['EquipoId'] ?>">
+                            <label for="tipo-tt-<?= (int) $pendiente['EquipoId'] ?>">Tipo de Trabajo Terminal</label>
+                            <select id="tipo-tt-<?= (int) $pendiente['EquipoId'] ?>" name="tipo_tt" required><option value="">Selecciona el tipo</option><option value="TT1">TT1</option><option value="TT2">TT2</option></select>
                             <label for="numero-tt-<?= (int) $pendiente['EquipoId'] ?>">Número de TT (ej. TT-2026-001)</label>
                             <input type="text" id="numero-tt-<?= (int) $pendiente['EquipoId'] ?>" name="numero_tt" maxlength="20" required placeholder="TT-2026-001">
                             <button class="button button-primary" type="submit">Asignar número de TT</button>

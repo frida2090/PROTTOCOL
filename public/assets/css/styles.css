@@ -71,6 +71,35 @@ input:focus, select:focus, textarea:focus { border-color: var(--wine); outline: 
 .activity-item .date-range { display: block; margin-bottom: 4px; }
 .empty-state { padding: 60px 20px; text-align: center; }
 .empty-state span { color: var(--gold); font-size: 2.5rem; }.empty-state h2 { font-size: 1.8rem; }.empty-state p { color: var(--muted); }
+.formulario1-page { display: grid; gap: 24px; }
+.formulario1-page .form-heading { margin-bottom: 0; }
+.formulario1-page .form-heading > p:last-child { color: var(--muted); margin: 12px 0 0; }
+.formulario1-page .form-panel { max-width: none; }
+.formulario1-type-list, .formulario1-signers { display: grid; gap: 12px; list-style: none; margin: 18px 0 0; padding: 0; }
+.formulario1-type-form, .formulario1-signers > li { align-items: end; border: 1px solid var(--line); display: grid; gap: 12px; grid-template-columns: minmax(150px, 1fr) auto minmax(150px, 220px) auto; padding: 14px; }
+.formulario1-type-form small, .formulario1-signers small { color: var(--muted); display: block; font-size: .78rem; }
+.formulario1-signers > li { align-items: start; grid-template-columns: minmax(0, 1fr) minmax(220px, .75fr); }
+.formulario1-sign-upload { align-items: end; grid-template-columns: minmax(0, 1fr) auto; }
+.formulario1-sign-upload label { grid-column: 1 / -1; }
+.formulario1-sign-upload input[type="file"] { font-size: .8rem; padding: 8px; }
+.formulario1-sign-upload .button { margin: 0; }
+.formulario1-detail-head { align-items: center; display: flex; gap: 18px; justify-content: space-between; }
+.formulario1-detail-head h2, .formulario1-type-panel h2, .formulario1-list h2, .formulario1-page > .form-panel > h2 { font-size: 1.7rem; }
+.formulario1-data { display: grid; gap: 0 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 20px 0 28px; }
+.formulario1-data div { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.formulario1-data dt { color: var(--muted); font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+.formulario1-data dd { margin: 4px 0 0; }
+.formulario1-detail h3 { font-family: 'Playfair Display', Georgia, serif; font-size: 1.3rem; margin-top: 30px; }
+.formulario1-review { border-top: 1px solid var(--line); margin-top: 25px; padding-top: 20px; }
+.formulario1-review-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.formulario1-review-actions .button { margin: 0; }
+.formulario1-list ul { display: grid; gap: 12px; list-style: none; margin: 18px 0 0; padding: 0; }
+.formulario1-list li { align-items: center; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px 0; }
+@media (max-width: 720px) {
+    .formulario1-type-form { grid-template-columns: 1fr; }
+    .formulario1-signers > li { grid-template-columns: 1fr; }
+    .formulario1-data { grid-template-columns: 1fr; }
+}
 .new-activity { background: var(--wine-dark); color: var(--white); display: grid; gap: 50px; grid-template-columns: 1fr 1fr; margin-top: 65px; padding: 38px; }
 .new-activity .eyebrow { color: var(--gold); }.new-activity h2 { font-size: 2rem; }.new-activity p { color: #d9cdd0; }.activity-form { grid-template-columns: 1fr 1fr; }.activity-form label, .activity-form textarea, .activity-form button { grid-column: 1 / -1; }.activity-form label span { color: #d9cdd0; font-weight: 400; }.activity-form input, .activity-form textarea { background: rgba(255,255,255,.1); border-color: #815766; color: var(--white); }.activity-form button { margin-top: 12px; }
 .home-hero { align-items: stretch; background: var(--white); display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr); min-height: 570px; overflow: hidden; }

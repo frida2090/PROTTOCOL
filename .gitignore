@@ -1,6 +1,8 @@
 # Credenciales y configuración local
 .env
 config/.env
+/vendor/
+/storage/
 
 # Sistema operativo y editor
 .DS_Store

@@ -11,6 +11,8 @@ $userPanelUrl = $user ? match ($user['rol']) {
         default        => 'calendario.php',
     }
     : 'calendario.php';
+$rolesFormulario1 = ['estudiante', 'director', 'sinodal', 'profesor_seguimiento', 'miembroCatt', 'jefeAcademia'];
+$puedeUsarFormulario1 = $user && array_intersect($user['roles'] ?? [], $rolesFormulario1);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -32,6 +34,7 @@ $userPanelUrl = $user ? match ($user['rol']) {
     <nav class="main-nav" id="main-nav" aria-label="Navegación principal">
         <?php if ($user): ?>
             <a href="calendario.php">Calendario</a>
+            <?php if ($puedeUsarFormulario1): ?><a href="formulario1.php">Formulario 1</a><?php endif; ?>
             <a href="directorio.php">Directorio académico</a>
             <a class="user-chip" href="<?= e($userPanelUrl) ?>" title="Abrir mi panel"><?= e(fullName($user)) ?></a>
             <a class="nav-logout" href="logout.php">Salir</a>

@@ -409,18 +409,18 @@ function borrarEquipoYPertenencias(PDO $db, int $equipoId): void
 // Número de TT registrado para un equipo (o null).
 function ttDeEquipo(PDO $db, int $equipoId): ?array
 {
-    $query = $db->prepare('SELECT TT_id, NumeroTT, Titulo, Descripcion, Status, EquipoId FROM TT WHERE EquipoId = ?');
+    $query = $db->prepare('SELECT TT_id, NumeroTT, TipoTT, Titulo, Descripcion, Status, EquipoId, fecha_presentacion FROM TT WHERE EquipoId = ?');
     $query->execute([$equipoId]);
     $tt = $query->fetch();
     return $tt ?: null;
 }
 
 // Asigna el Número de TT a un equipo aprobado por los sinodales.
-function asignarNumeroTT(PDO $db, int $equipoId, string $numeroTT, int $cattUserId): array
+function asignarNumeroTT(PDO $db, int $equipoId, string $numeroTT, string $tipoTT, int $cattUserId): array
 {
     $numeroTT = strtoupper(trim($numeroTT));
-    if ($numeroTT === '' || mb_strlen($numeroTT) > 20) {
-        return ['ok' => false, 'mensaje' => 'Captura un número de TT válido (máximo 20 caracteres).'];
+    if ($numeroTT === '' || mb_strlen($numeroTT) > 20 || !in_array($tipoTT, ['TT1', 'TT2'], true)) {
+        return ['ok' => false, 'mensaje' => 'Captura un número de TT válido y selecciona TT1 o TT2.'];
     }
 
     try {
@@ -449,11 +449,11 @@ function asignarNumeroTT(PDO $db, int $equipoId, string $numeroTT, int $cattUser
             throw new DomainException('El equipo ya no existe.');
         }
 
-        $db->prepare('INSERT INTO TT (NumeroTT, Titulo, Descripcion, EquipoId) VALUES (?, ?, ?, ?)')
-            ->execute([$numeroTT, $datos['TituloProtocolo'], $datos['Descripcion'], $equipoId]);
+        $db->prepare('INSERT INTO TT (NumeroTT, TipoTT, Titulo, Descripcion, EquipoId) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$numeroTT, $tipoTT, $datos['TituloProtocolo'], $datos['Descripcion'], $equipoId]);
 
         $db->commit();
-        return ['ok' => true, 'mensaje' => "Número de TT {$numeroTT} asignado correctamente."];
+        return ['ok' => true, 'mensaje' => "Número de {$tipoTT} {$numeroTT} asignado correctamente."];
     } catch (DomainException $exception) {
         if (isset($db) && $db->inTransaction()) {
             $db->rollBack();
@@ -485,7 +485,7 @@ function puedeVerFormato(PDO $db, array $user, array $formato): bool
         return (int) $query->fetchColumn() > 0;
     }
 
-    if (array_intersect($roles, ['director', 'sinodal'])) {
+    if (array_intersect($roles, ['director', 'sinodal', 'profesor_seguimiento'])) {
         $query = $db->prepare('SELECT COUNT(*) FROM EmpleadoEquipo WHERE UserId = ? AND EquipoId = ?');
         $query->execute([(int) $user['id'], $equipoId]);
         return (int) $query->fetchColumn() > 0;
